@@ -1,6 +1,5 @@
-
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog } from 'lucide-react'; // Added UserCog
+import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase } from 'lucide-react'; // Added CreditCard, Briefcase
 
 export type NavItem = {
   href: string;
@@ -21,7 +20,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/call-centers',
     label: 'Call Centers',
     icon: Building,
-    // SUPER_ADMIN can manage all. CALL_CENTER_ADMIN can view/manage their assigned ones.
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN"], 
   },
   {
@@ -55,9 +53,21 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
   },
   {
+    href: '/accounting',
+    label: 'Accounting',
+    icon: Briefcase, 
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    href: '/billing',
+    label: 'My Billing',
+    icon: CreditCard,
+    roles: ["CALL_CENTER_ADMIN"],
+  },
+  {
     href: '/user-management',
     label: 'User Management',
-    icon: UserCog, // Using UserCog as UserShield is not in lucide-react by default
-    roles: ["SUPER_ADMIN"], // Only Super Admins can see this
+    icon: UserCog,
+    roles: ["SUPER_ADMIN"],
   },
 ];

@@ -1,4 +1,3 @@
-
 export type UserRole = "SUPER_ADMIN" | "CALL_CENTER_ADMIN" | "DESIGN_ADMIN";
 
 export interface User {
@@ -9,11 +8,18 @@ export interface User {
   assignedCallCenterIds?: string[]; // Relevant for CALL_CENTER_ADMIN and DESIGN_ADMIN
 }
 
+export type BillingRateType = "per_call" | "per_hour" | "per_day" | "per_month";
+export type InvoiceStatus = "draft" | "pending" | "paid" | "overdue" | "cancelled";
+
 export interface CallCenter {
   id: string;
   name: string;
-  location?: string; // Optional: location of the call center
-  // createdByUserId?: string; // Optional: if tracking who created it
+  location?: string;
+  billingConfig?: {
+    rateType: BillingRateType;
+    amount: number; // e.g., 0.01 for per_call, 10 for per_hour
+    currency: string; // e.g., "USD"
+  };
 }
 
 export interface ScriptVariant {
@@ -29,43 +35,39 @@ export interface Campaign {
   targetAudience: string;
   callObjective: string;
   createdDate: string;
-  callCenterId: string; 
-  conversionRate?: number; 
+  callCenterId: string;
+  conversionRate?: number;
   masterScript?: string;
   scriptVariants?: ScriptVariant[];
-  // createdByUserId?: string;
 }
 
 export interface Voice {
   id: string;
   name: string;
-  provider?: string; 
-  settings?: Record<string, any>; 
-  callCenterId: string; 
-  // createdByUserId?: string;
+  provider?: string;
+  settings?: Record<string, any>;
+  callCenterId: string;
 }
 
 export interface Agent {
   id: string;
-  name: string; 
+  name: string;
   campaignId: string;
-  scriptVariantId: string; 
+  scriptVariantId: string;
   voiceId: string;
-  callCenterId: string; 
+  callCenterId: string;
   performanceMetric?: number;
-  // createdByUserId?: string;
 }
 
 export interface Bot {
   id: string;
   name: string;
   campaignId: string;
-  agentId: string; 
+  agentId: string;
   status: "active" | "inactive" | "error";
   creationDate: string;
-  callCenterId: string; 
+  callCenterId: string;
   lastActivity?: string;
-  // createdByUserId?: string;
 }
 
 export interface Script {
@@ -73,8 +75,33 @@ export interface Script {
   name: string;
   content: string;
   isMaster: boolean;
-  parentId?: string; 
+  parentId?: string;
   createdDate: string;
-  campaignId: string; 
+  campaignId: string;
 }
 
+export interface InvoiceLineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+export interface Invoice {
+  id: string;
+  callCenterId: string;
+  invoiceNumber: string;
+  issueDate: string;
+  dueDate: string;
+  items: InvoiceLineItem[];
+  subtotal: number;
+  taxRate?: number; // Optional tax rate as a percentage (e.g., 0.07 for 7%)
+  taxAmount?: number;
+  total: number;
+  status: InvoiceStatus;
+  paidDate?: string;
+  notes?: string;
+  // paymentMethod?: string; // Example: "Credit Card ending in 1234"
+  // transactionId?: string; // Example: Payment gateway transaction ID
+}

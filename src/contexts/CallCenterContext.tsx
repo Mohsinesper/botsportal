@@ -1,34 +1,35 @@
-
 "use client";
 
 import type { CallCenter } from "@/types";
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { MOCK_GLOBAL_CALL_CENTERS } from "@/lib/mock-data";
 import { useAuth } from "./AuthContext"; // Import useAuth
+// import { updateCallCenterBillingConfigInMock } from "@/lib/accounting-mock"; // For later use
 
 interface CallCenterContextType {
-  callCenters: CallCenter[]; // This will be the list of *accessible* call centers
-  allCallCenters: CallCenter[]; // All call centers in the system (for super admin, etc.)
+  callCenters: CallCenter[]; 
+  allCallCenters: CallCenter[]; 
   currentCallCenter: CallCenter | null;
   setCurrentCallCenterById: (id: string | null) => void;
-  addCallCenter: (newCallCenterData: Omit<CallCenter, "id">) => void;
-  isLoading: boolean; // Combined loading state
+  addCallCenter: (newCallCenterData: Omit<CallCenter, "id" | "billingConfig"> & { billingConfig?: CallCenter['billingConfig'] }) => void;
+  updateCallCenterBillingConfig: (callCenterId: string, config: CallCenter['billingConfig']) => CallCenter | undefined;
+  isLoading: boolean; 
 }
 
 const CallCenterContext = createContext<CallCenterContextType | undefined>(undefined);
 
-const CALL_CENTERS_STORAGE_KEY = "callFlowAi_callCenters"; // Stores all CCs
+const CALL_CENTERS_STORAGE_KEY = "callFlowAi_callCenters"; 
 const CURRENT_CALL_CENTER_ID_STORAGE_KEY = "callFlowAi_currentCallCenterId";
 
 export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
   const { currentUser, isLoading: isAuthLoading } = useAuth();
-  const [allCallCenters, setAllCallCenters] = useState<CallCenter[]>([]); // All system CCs
+  const [allCallCentersState, setAllCallCentersState] = useState<CallCenter[]>([]); 
   const [accessibleCallCenters, setAccessibleCallCenters] = useState<CallCenter[]>([]);
   const [currentCallCenter, setCurrentCallCenter] = useState<CallCenter | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(isAuthLoading); // Sync with auth loading state
+    setIsLoading(isAuthLoading); 
     if (isAuthLoading) return;
 
     try {
@@ -44,9 +45,8 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
           console.warn("Failed to parse stored call centers, using default.", e);
         }
       }
-      setAllCallCenters(initialAllCallCenters);
+      setAllCallCentersState(initialAllCallCenters);
 
-      // Filter accessible call centers based on user role
       let userAccessibleCenters: CallCenter[] = [];
       if (currentUser) {
         if (currentUser.role === "SUPER_ADMIN") {
@@ -63,7 +63,6 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
       let activeCenter: CallCenter | null = null;
 
       if (storedCurrentId && storedCurrentId !== "null") {
-        // Ensure the stored current CC is accessible to the user
         activeCenter = userAccessibleCenters.find(cc => cc.id === storedCurrentId) || null;
       }
       
@@ -80,10 +79,10 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
 
     } catch (error) {
       console.error("Error accessing localStorage for Call Centers:", error);
-      setAllCallCenters(MOCK_GLOBAL_CALL_CENTERS);
-      // Basic fallback if localStorage fails or no user context yet
-      setAccessibleCallCenters(MOCK_GLOBAL_CALL_CENTERS); 
-      if (MOCK_GLOBAL_CALL_CENTERS.length > 0) {
+      setAllCallCentersState(MOCK_GLOBAL_CALL_CENTERS);
+      setAccessibleCallCenters([]); 
+      if (MOCK_GLOBAL_CALL_CENTERS.length > 0 && currentUser?.role === "SUPER_ADMIN") {
+          setAccessibleCallCenters(MOCK_GLOBAL_CALL_CENTERS);
           setCurrentCallCenter(MOCK_GLOBAL_CALL_CENTERS[0]);
       }
     }
@@ -91,14 +90,14 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
   }, [currentUser, isAuthLoading]);
 
   useEffect(() => {
-    if (!isLoading && !isAuthLoading) { // Save allCallCenters, not just accessible ones
+    if (!isLoading && !isAuthLoading) { 
         try {
-            localStorage.setItem(CALL_CENTERS_STORAGE_KEY, JSON.stringify(allCallCenters));
+            localStorage.setItem(CALL_CENTERS_STORAGE_KEY, JSON.stringify(allCallCentersState));
         } catch (error) {
             console.error("Error saving all call centers to localStorage:", error);
         }
     }
-  }, [allCallCenters, isLoading, isAuthLoading]);
+  }, [allCallCentersState, isLoading, isAuthLoading]);
 
   const setCurrentCallCenterById = (id: string | null) => {
     if (id === null) {
@@ -110,7 +109,6 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
       }
       return;
     }
-    // Ensure the center being set is in the list of accessible centers for the current user
     const center = accessibleCallCenters.find(cc => cc.id === id);
     if (center) {
       setCurrentCallCenter(center);
@@ -120,7 +118,6 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
         console.error("Error saving current call center ID to localStorage:", error);
       }
     } else {
-        // If trying to set a non-accessible CC, clear it or set to first accessible
         if (accessibleCallCenters.length > 0) {
             setCurrentCallCenter(accessibleCallCenters[0]);
             localStorage.setItem(CURRENT_CALL_CENTER_ID_STORAGE_KEY, accessibleCallCenters[0].id);
@@ -128,30 +125,23 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
             setCurrentCallCenter(null);
             localStorage.removeItem(CURRENT_CALL_CENTER_ID_STORAGE_KEY);
         }
-        console.warn("Attempted to set a non-accessible call center as current.");
     }
   };
 
-  const addCallCenter = (newCallCenterData: Omit<CallCenter, "id">) => {
-    // Only Super Admins should ideally be able to add call centers.
-    // This logic might be better in a server action with permission checks.
-    // For now, client-side for mock.
+  const addCallCenter = (newCallCenterData: Omit<CallCenter, "id" | "billingConfig"> & { billingConfig?: CallCenter['billingConfig'] }) => {
     if (currentUser?.role !== "SUPER_ADMIN") {
-        console.warn("Only Super Admins can add new call centers.");
-        // Optionally show a toast message to the user
         return;
     }
 
     const newCallCenter: CallCenter = {
       ...newCallCenterData,
       id: `cc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      billingConfig: newCallCenterData.billingConfig || { rateType: "per_month", amount: 0, currency: "USD" } // Default billing config
     };
-    setAllCallCenters(prev => {
+    setAllCallCentersState(prev => {
         const updatedCenters = [...prev, newCallCenter];
-         // If current user is super admin, they can access it.
         if (currentUser?.role === "SUPER_ADMIN") {
             setAccessibleCallCenters(updatedCenters);
-             // If it's the first CC overall or first accessible one after filtering
             if (!currentCallCenter || accessibleCallCenters.length === 0) {
                 setCurrentCallCenter(newCallCenter);
                 try {
@@ -165,13 +155,46 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const updateCallCenterBillingConfig = (
+    callCenterId: string, 
+    config: CallCenter['billingConfig']
+  ): CallCenter | undefined => {
+    let updatedCenter: CallCenter | undefined = undefined;
+    setAllCallCentersState(prevAll => {
+      const newAll = prevAll.map(cc => {
+        if (cc.id === callCenterId) {
+          updatedCenter = { ...cc, billingConfig: config };
+          return updatedCenter;
+        }
+        return cc;
+      });
+      return newAll;
+    });
+    // Also update accessibleCallCenters if the updated one is in there
+    setAccessibleCallCenters(prevAcc => {
+      return prevAcc.map(cc => {
+        if (cc.id === callCenterId && updatedCenter) {
+          return updatedCenter;
+        }
+        return cc;
+      });
+    });
+    // If the current call center is the one being updated
+    if (currentCallCenter?.id === callCenterId && updatedCenter) {
+      setCurrentCallCenter(updatedCenter);
+    }
+    return updatedCenter;
+  };
+
+
   return (
     <CallCenterContext.Provider value={{ 
         callCenters: accessibleCallCenters, 
-        allCallCenters,
+        allCallCenters: allCallCentersState,
         currentCallCenter, 
         setCurrentCallCenterById, 
         addCallCenter, 
+        updateCallCenterBillingConfig,
         isLoading 
     }}>
       {children}
