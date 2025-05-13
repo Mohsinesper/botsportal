@@ -1,17 +1,21 @@
 
 "use client";
 
+import * as React from "react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuPortal, DropdownMenuSubContent, DropdownMenuGroup } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Sun, Moon, UserCircle } from "lucide-react";
-import { useTheme } from "next-themes"; // Assuming next-themes is or will be installed for theme toggling
+import { Sun, Moon, UserCircle, Building, ChevronsUpDown, Check } from "lucide-react";
+import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/constants";
 import Link from "next/link";
+import { useCallCenter } from "@/contexts/CallCenterContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Helper component for theme toggle, to avoid hydration mismatch with useTheme
+
 function ThemeToggle() {
   const { setTheme, theme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
@@ -19,8 +23,7 @@ function ThemeToggle() {
   React.useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    // Render a placeholder or null during server rendering / pre-hydration
-    return <Button variant="ghost" size="icon" className="w-8 h-8 opacity-0" disabled />;
+    return <Button variant="ghost" size="icon" className="w-8 h-8 opacity-0" disabled aria-label="Toggle theme placeholder" />;
   }
   
   return (
@@ -40,8 +43,15 @@ function ThemeToggle() {
 
 export function Header() {
   const pathname = usePathname();
+  const { callCenters, currentCallCenter, setCurrentCallCenterById, isLoading } = useCallCenter();
+
   const currentNavItem = NAV_ITEMS.find(item => item.match ? item.match(pathname) : pathname.startsWith(item.href));
   const pageTitle = currentNavItem ? currentNavItem.label : "CallFlowAI";
+
+
+  const handleCallCenterChange = (callCenterId: string) => {
+    setCurrentCallCenterById(callCenterId);
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
@@ -54,7 +64,49 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        <ThemeToggleClientWrapper />
+        {isLoading ? (
+           <Skeleton className="h-8 w-40 rounded-md" />
+        ) : callCenters.length > 0 && currentCallCenter ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="min-w-[180px] justify-start">
+                <Building className="mr-2 h-4 w-4" />
+                <span className="truncate flex-1 text-left">{currentCallCenter.name}</span>
+                <ChevronsUpDown className="ml-auto h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[--radix-dropdown-menu-trigger-width]">
+              <DropdownMenuLabel>Switch Call Center</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+              {callCenters.map((center) => (
+                <DropdownMenuItem
+                  key={center.id}
+                  onClick={() => handleCallCenterChange(center.id)}
+                  className="cursor-pointer"
+                >
+                  <Building className={`mr-2 h-4 w-4 ${currentCallCenter.id === center.id ? 'opacity-100' : 'opacity-0'}`} />
+                  {center.name}
+                  {currentCallCenter.id === center.id && <Check className="ml-auto h-4 w-4" />}
+                </DropdownMenuItem>
+              ))}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/call-centers">Manage Call Centers</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+           <Button variant="outline" asChild>
+             <Link href="/call-centers">
+                <Building className="mr-2 h-4 w-4" />
+                Add Call Center
+             </Link>
+           </Button>
+        )}
+        
+        <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -79,31 +131,3 @@ export function Header() {
     </header>
   );
 }
-
-
-// Client wrapper for ThemeToggle to ensure useTheme works correctly
-// This is a common pattern to avoid hydration issues with theme logic
-function ThemeToggleClientWrapper() {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return <div className="w-8 h-8" />; // Placeholder
-  }
-  
-  // Dynamically import ThemeProvider from next-themes if not already part of the root layout
-  // For simplicity here, assuming ThemeProvider is in a higher level component or we use a simpler toggle.
-  // If next-themes is not installed, this part would need adjustment.
-  // For now, let's use a simplified theme toggle that might just toggle a class on body.
-  // However, the proper way is using next-themes.
-
-  // For this exercise, I'll install next-themes.
-  // Add "next-themes": "^0.3.0" to package.json dependencies.
-  // And wrap the RootLayout's children with <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-  return <ThemeToggle />;
-}
-
-// Need to ensure React is imported if not already.
-import * as React from "react";

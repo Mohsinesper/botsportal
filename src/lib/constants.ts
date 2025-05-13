@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, BotMessageSquare, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2 } from 'lucide-react';
+import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building } from 'lucide-react';
 
 export type NavItem = {
   href: string;
@@ -15,6 +15,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Dashboard',
     icon: LayoutDashboard,
     match: (pathname) => pathname === '/',
+  },
+  {
+    href: '/call-centers',
+    label: 'Call Centers',
+    icon: Building,
   },
   {
     href: '/campaigns',
@@ -42,3 +47,4 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ListChecks,
   },
 ];
+

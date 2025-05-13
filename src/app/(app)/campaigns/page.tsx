@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye } from "lucide-react";
-import type { Campaign, ScriptVariant, CallCenter } from "@/types";
+import type { Campaign, ScriptVariant } from "@/types"; // CallCenter type no longer needed here
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -20,62 +20,67 @@ import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { handleGenerateCampaignScripts } from "./actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useCallCenter } from "@/contexts/CallCenterContext";
+import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Assume a current call center ID for now. In a real app, this would come from user session/context.
-const MOCK_CURRENT_CALL_CENTER_ID = "cc1";
-
-const mockCallCenters: CallCenter[] = [
-  { id: "cc1", name: "Main Call Center HQ", location: "New York" },
-  { id: "cc2", name: "West Coast Operations", location: "California" },
-];
-
-const campaignSchema = z.object({
+const campaignSchemaBase = z.object({
   id: z.string().optional(),
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
   status: z.enum(["active", "paused", "archived", "draft"]),
   targetAudience: z.string().min(10, "Target audience description is required"),
   callObjective: z.string().min(5, "Call objective is required"),
-  callCenterId: z.string().min(1, "Call Center ID is required"),
+  // callCenterId is now handled by context
   tone: z.string().min(3, "Tone for script generation is required"),
   variantCount: z.coerce.number().int().min(1).max(5).default(3),
 });
 
-type CampaignFormData = z.infer<typeof campaignSchema>;
+type CampaignFormData = z.infer<typeof campaignSchemaBase>;
+
+// Mock data should ideally be fetched or managed globally, but for now, kept here and filtered.
+const allMockCampaigns: Campaign[] = [
+    { id: "1", name: "Summer Sale Promo CC1", status: "active", targetAudience: "Existing customers aged 25-40 interested in tech.", callObjective: "Promote new summer discounts and drive sales.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, masterScript: "Hello [Customer Name], this is a call about our amazing Summer Sale!", scriptVariants: [{id: "sv1-1", name: "Variant 1", content: "Summer Sale Variant 1 content..."}]},
+    { id: "2", name: "New Product Launch CC1", status: "paused", targetAudience: "New leads from recent marketing campaign.", callObjective: "Introduce new product and generate qualified leads.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2 },
+    { id: "3", name: "Customer Feedback Drive CC2", status: "draft", targetAudience: "Customers who purchased in the last 3 months.", callObjective: "Gather feedback on recent purchases and identify areas for improvement.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2" },
+    { id: "4", name: "Winter Special CC1", status: "archived", targetAudience: "All subscribers in cold regions.", callObjective: "Promote winter heating solutions.", createdDate: new Date(Date.now() - 86400000 * 20).toISOString(), callCenterId: "cc1", masterScript: "Stay warm this winter with our new heaters!", scriptVariants: [] },
+    { id: "5", name: "Spring Cleaning Deals CC2", status: "active", targetAudience: "Homeowners in suburban areas.", callObjective: "Offer special discounts on cleaning services.", createdDate: new Date().toISOString(), callCenterId: "cc2", masterScript: "Get your home sparkling for spring!", scriptVariants: [{id: "sv1-5", name: "Early Bird", content: "Book early for spring cleaning..."}]},
+    { id: "6", name: "Tech Support Outreach CC3", status: "draft", targetAudience: "Users of Product X.", callObjective: "Proactively offer tech support and gather feedback.", createdDate: new Date().toISOString(), callCenterId: "cc3", masterScript: "Hello, we're calling from tech support for Product X."},
+];
+
 
 export default function CampaignsPage() {
+  const { currentCallCenter, callCenters: allCallCentersList, isLoading: isCallCenterLoading } = useCallCenter();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [viewingScriptsCampaign, setViewingScriptsCampaign] = useState<Campaign | null>(null);
-  
-  // Simulating a selected call center.
-  const [currentCallCenterId, setCurrentCallCenterId] = useState<string>(MOCK_CURRENT_CALL_CENTER_ID);
 
   const { control, handleSubmit, register, reset, formState: { errors }, setValue } = useForm<CampaignFormData>({
-    resolver: zodResolver(campaignSchema),
+    resolver: zodResolver(campaignSchemaBase),
     defaultValues: {
       name: "",
       status: "draft",
       targetAudience: "",
       callObjective: "",
-      callCenterId: currentCallCenterId,
       tone: "Professional",
       variantCount: 3,
     }
   });
   
   useEffect(() => {
-    const fetchedCampaigns: Campaign[] = [
-      { id: "1", name: "Summer Sale Promo CC1", status: "active", targetAudience: "Existing customers aged 25-40 interested in tech.", callObjective: "Promote new summer discounts and drive sales.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, masterScript: "Hello [Customer Name], this is a call about our amazing Summer Sale!", scriptVariants: [{id: "sv1-1", name: "Variant 1", content: "Summer Sale Variant 1 content..."}]},
-      { id: "2", name: "New Product Launch CC1", status: "paused", targetAudience: "New leads from recent marketing campaign.", callObjective: "Introduce new product and generate qualified leads.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2 },
-      { id: "3", name: "Customer Feedback Drive CC2", status: "draft", targetAudience: "Customers who purchased in the last 3 months.", callObjective: "Gather feedback on recent purchases and identify areas for improvement.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2" },
-      { id: "4", name: "Winter Special CC1", status: "archived", targetAudience: "All subscribers in cold regions.", callObjective: "Promote winter heating solutions.", createdDate: new Date(Date.now() - 86400000 * 20).toISOString(), callCenterId: "cc1", masterScript: "Stay warm this winter with our new heaters!", scriptVariants: [] },
-    ];
-    setCampaigns(fetchedCampaigns);
-  }, []);
+    if (currentCallCenter) {
+      setCampaigns(allMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
+    } else {
+      setCampaigns([]); // Clear campaigns if no call center is selected
+    }
+  }, [currentCallCenter]);
 
   const onSubmit = async (data: CampaignFormData) => {
+    if (!currentCallCenter) {
+      toast({ title: "Error", description: "No call center selected. Please select a call center first.", variant: "destructive" });
+      return;
+    }
     setIsGeneratingScripts(true);
     let campaignId = editingCampaign ? editingCampaign.id : Date.now().toString();
     
@@ -107,11 +112,17 @@ export default function CampaignsPage() {
 
     const campaignDataWithCallCenter = {
       ...data,
-      callCenterId: data.callCenterId || currentCallCenterId, // Ensure callCenterId is set
+      callCenterId: currentCallCenter.id, 
     };
 
     if (editingCampaign) {
-      setCampaigns(campaigns.map(c => c.id === editingCampaign.id ? { ...editingCampaign, ...campaignDataWithCallCenter, masterScript: masterScript ?? editingCampaign.masterScript, scriptVariants: scriptVariants ?? editingCampaign.scriptVariants } : c));
+      // Update in the global mock list and then filter
+      const updatedAllMockCampaigns = allMockCampaigns.map(c => c.id === editingCampaign.id ? { ...editingCampaign, ...campaignDataWithCallCenter, masterScript: masterScript ?? editingCampaign.masterScript, scriptVariants: scriptVariants ?? editingCampaign.scriptVariants } : c);
+      // This is a hack for mock data. In a real app, this would be an API call.
+      // For now, we'll update the source `allMockCampaigns` directly for persistence across filters
+      allMockCampaigns.splice(0, allMockCampaigns.length, ...updatedAllMockCampaigns);
+      setCampaigns(updatedAllMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
+
       toast({ title: "Campaign Updated", description: `Campaign "${data.name}" has been successfully updated.`});
     } else {
       const newCampaign: Campaign = {
@@ -121,20 +132,21 @@ export default function CampaignsPage() {
         masterScript,
         scriptVariants,
       };
-      setCampaigns(prev => [...prev, newCampaign]);
+      allMockCampaigns.push(newCampaign); // Add to global mock list
+      setCampaigns(prev => [...prev, newCampaign]); // Add to current filtered list
       toast({ title: "Campaign Created", description: `Campaign "${data.name}" has been successfully created.`});
     }
     
     setIsGeneratingScripts(false);
     setIsDialogOpen(false);
-    reset({ ...campaignSchema.shape, callCenterId: currentCallCenterId }); // Reset with current call center
+    reset({name: "", status: "draft", targetAudience: "", callObjective: "", tone: "Professional", variantCount: 3});
     setEditingCampaign(null);
   };
 
   const handleEdit = (campaign: Campaign) => {
     setEditingCampaign(campaign);
     reset({
-      ...campaign, // Spread all campaign fields
+      ...campaign,
       tone: "Professional", // Default or fetch if stored
       variantCount: campaign.scriptVariants?.length || 3,
     });
@@ -142,12 +154,19 @@ export default function CampaignsPage() {
   };
 
   const handleDelete = (id: string) => {
+     // Remove from global mock list
+    const index = allMockCampaigns.findIndex(c => c.id === id);
+    if (index > -1) allMockCampaigns.splice(index, 1);
     setCampaigns(campaigns.filter(c => c.id !== id));
     toast({ title: "Campaign Deleted", description: "The campaign has been deleted.", variant: "destructive" });
   };
   
   const handleStatusChange = (id: string, status: Campaign["status"]) => {
-    setCampaigns(campaigns.map(c => c.id === id ? { ...c, status } : c));
+    const updatedAllMockCampaigns = allMockCampaigns.map(c => c.id === id ? { ...c, status } : c);
+    allMockCampaigns.splice(0, allMockCampaigns.length, ...updatedAllMockCampaigns);
+    if (currentCallCenter) {
+      setCampaigns(updatedAllMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
+    }
     toast({ title: "Status Updated", description: `Campaign status changed to ${status}.`});
   };
 
@@ -159,7 +178,7 @@ export default function CampaignsPage() {
     setValue("targetAudience", campaign.targetAudience);
     setValue("callObjective", campaign.callObjective);
     setValue("status", campaign.status);
-    setValue("callCenterId", campaign.callCenterId);
+    // callCenterId is implicit from currentCallCenter
     setIsDialogOpen(true); 
   };
   
@@ -168,7 +187,7 @@ export default function CampaignsPage() {
       case "active": return "default";
       case "paused": return "secondary";
       case "archived": return "outline";
-      case "draft": return "outline"; // Consider a "info" or "warning" variant for draft
+      case "draft": return "outline"; 
       default: return "outline";
     }
   };
@@ -178,19 +197,52 @@ export default function CampaignsPage() {
       case "active": return <Play className="mr-2 h-4 w-4" />;
       case "paused": return <Pause className="mr-2 h-4 w-4" />;
       case "archived": return <Archive className="mr-2 h-4 w-4" />;
-      default: return null; // Or a specific icon for "draft"
+      default: return null;
     }
   };
 
-  const filteredCampaigns = campaigns.filter(c => c.callCenterId === currentCallCenterId);
+  if (isCallCenterLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-9 w-72" />
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <Card className="shadow-lg">
+          <CardContent className="p-0">
+             <Skeleton className="h-64 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!currentCallCenter) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+           <h2 className="text-3xl font-bold tracking-tight">Campaign Management</h2>
+        </div>
+         <Card className="shadow-lg">
+            <CardHeader>
+                <CardTitle>No Call Center Selected</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p>Please select a call center from the header or <Link href="/call-centers" className="text-primary underline">add and select a call center</Link> to manage campaigns.</p>
+            </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold tracking-tight">Campaign Management ({mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name || 'Selected Call Center'})</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Campaign Management ({currentCallCenter.name})</h2>
         <Button onClick={() => { 
           setEditingCampaign(null); 
-          reset({name: "", status: "draft", targetAudience: "", callObjective: "", callCenterId: currentCallCenterId, tone: "Professional", variantCount: 3}); 
+          reset({name: "", status: "draft", targetAudience: "", callObjective: "", tone: "Professional", variantCount: 3}); 
           setIsDialogOpen(true); 
         }}>
           <PlusCircle className="mr-2 h-4 w-4" /> Create Campaign
@@ -201,7 +253,7 @@ export default function CampaignsPage() {
         setIsDialogOpen(isOpen);
         if (!isOpen) {
           setEditingCampaign(null);
-          reset({ ...campaignSchema.shape, callCenterId: currentCallCenterId });
+          reset({name: "", status: "draft", targetAudience: "", callObjective: "", tone: "Professional", variantCount: 3});
         }
       }}>
         <DialogContent className="sm:max-w-lg">
@@ -209,13 +261,10 @@ export default function CampaignsPage() {
             <DialogTitle>{editingCampaign ? "Edit Campaign & Scripts" : "Create New Campaign & Generate Scripts"}</DialogTitle>
             <DialogDescription>
               {editingCampaign ? "Update campaign details and re-generate scripts." : "Fill in details to create a campaign and generate initial scripts."}
-              {" "}Campaigns will be associated with '{mockCallCenters.find(cc => cc.id === (editingCampaign?.callCenterId || currentCallCenterId))?.name || 'current call center'}'.
+              {" "}Campaign will be associated with '{currentCallCenter.name}'.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
-            {/* Hidden Call Center ID field, or could be a selector if users can change it */}
-            <input type="hidden" {...register("callCenterId")} />
-
             <div>
               <Label htmlFor="name">Campaign Name</Label>
               <Input id="name" {...register("name")} className="mt-1" />
@@ -359,7 +408,7 @@ export default function CampaignsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCampaigns.length > 0 ? filteredCampaigns.map((campaign) => (
+              {campaigns.length > 0 ? campaigns.map((campaign) => (
                 <TableRow key={campaign.id}>
                   <TableCell className="font-medium">{campaign.name}</TableCell>
                   <TableCell>

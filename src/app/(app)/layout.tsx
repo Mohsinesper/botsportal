@@ -1,6 +1,7 @@
 
 import { AppLayout } from "@/components/layout/app-layout";
-import { ThemeProvider } from "@/components/theme-provider"; // Assuming you'll create this or install next-themes
+import { ThemeProvider } from "@/components/theme-provider";
+import { CallCenterProvider } from "@/contexts/CallCenterContext";
 
 export default function ApplicationLayout({
   children,
@@ -14,7 +15,9 @@ export default function ApplicationLayout({
       enableSystem
       disableTransitionOnChange
     >
-      <AppLayout>{children}</AppLayout>
+      <CallCenterProvider>
+        <AppLayout>{children}</AppLayout>
+      </CallCenterProvider>
     </ThemeProvider>
   );
 }

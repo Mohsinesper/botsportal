@@ -12,20 +12,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Cpu, Zap, Users, Shuffle } from "lucide-react";
-import type { Campaign, Agent, Bot, Voice, ScriptVariant, CallCenter } from "@/types";
+import type { Campaign, Agent, Bot, Voice, ScriptVariant } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { useCallCenter } from "@/contexts/CallCenterContext";
+import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Assume a current call center ID. In a real app, this would come from user session/context.
-const MOCK_CURRENT_CALL_CENTER_ID = "cc1";
-
-const mockCallCenters: CallCenter[] = [
-  { id: "cc1", name: "Main Call Center HQ", location: "New York" },
-  { id: "cc2", name: "West Coast Operations", location: "California" },
-];
-
-// Mock data (replace with actual data fetching)
-const mockCampaigns: Campaign[] = [
+// Global Mock data (replace with actual data fetching for a real app)
+const allMockCampaigns: Campaign[] = [
   { 
     id: "c1", 
     name: "Summer Sale Campaign (CC1)", 
@@ -66,20 +61,35 @@ const mockCampaigns: Campaign[] = [
       { id: "sv1-c3", name: "Winter Variant Early Bird", content: "Early bird specials for winter!" },
     ]
   },
+   { 
+    id: "c4", 
+    name: "Support Follow-up (CC3)", 
+    status: "active", 
+    targetAudience: "Customers with recent support tickets", 
+    callObjective: "Ensure issue resolution and satisfaction", 
+    createdDate: "2023-04-01",
+    callCenterId: "cc3",
+    masterScript: "Master script for support follow-up...",
+    scriptVariants: [
+      { id: "sv1-c4", name: "Support Check-in", content: "Hello, this is a follow-up on your recent support request..." },
+    ]
+  },
 ];
 
-const mockVoices: Voice[] = [
+const allMockVoices: Voice[] = [
   { id: "v1", name: "Ava - Friendly Female", provider: "ElevenLabs", callCenterId: "cc1" },
   { id: "v2", name: "John - Professional Male", provider: "GoogleTTS", callCenterId: "cc1" },
   { id: "v3", name: "Mia - Empathetic Female", provider: "ElevenLabs", callCenterId: "cc2" },
   { id: "v4", name: "Liam - Clear Male", provider: "GoogleTTS", callCenterId: "cc2" },
+  { id: "v5", name: "Zoe - Upbeat Female", provider: "AzureTTS", callCenterId: "cc3"},
 ];
 
-const mockAgents: Agent[] = [
+const allMockAgents: Agent[] = [
   { id: "agent1", name: "Summer Sale V1 - Ava (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
   { id: "agent2", name: "Summer Sale V2 - John (CC1)", campaignId: "c1", scriptVariantId: "sv2-c1", voiceId: "v2", callCenterId: "cc1" },
-  { id: "agent3", name: "Feedback Polite - Ava (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v1", callCenterId: "cc1" }, // Changed voice to v1 for cc1
+  { id: "agent3", name: "Feedback Polite - Ava (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v1", callCenterId: "cc1" },
   { id: "agent4", name: "Winter Early - Mia (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2" },
+  { id: "agent5", name: "Support Check - Zoe (CC3)", campaignId: "c4", scriptVariantId: "sv1-c4", voiceId: "v5", callCenterId: "cc3"},
 ];
 
 
@@ -110,12 +120,10 @@ const botGenerationSchema = z.object({
 type BotGenerationFormData = z.infer<typeof botGenerationSchema>;
 
 export default function BotGenerationPage() {
+  const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
   const [isLoading, setIsLoading] = useState(false);
   const [generatedBots, setGeneratedBots] = useState<Bot[]>([]);
   
-  // Simulating a selected call center.
-  const [currentCallCenterId, setCurrentCallCenterId] = useState<string>(MOCK_CURRENT_CALL_CENTER_ID);
-
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]); 
   const [voices, setVoices] = useState<Voice[]>([]);
@@ -123,11 +131,21 @@ export default function BotGenerationPage() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | undefined>();
 
   useEffect(() => {
-    // Filter initial data by currentCallCenterId
-    setCampaigns(mockCampaigns.filter(c => c.callCenterId === currentCallCenterId));
-    setAgents(mockAgents.filter(a => a.callCenterId === currentCallCenterId));
-    setVoices(mockVoices.filter(v => v.callCenterId === currentCallCenterId));
-  }, [currentCallCenterId]);
+    if (currentCallCenter) {
+      setCampaigns(allMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
+      setAgents(allMockAgents.filter(a => a.callCenterId === currentCallCenter.id));
+      setVoices(allMockVoices.filter(v => v.callCenterId === currentCallCenter.id));
+    } else {
+      setCampaigns([]);
+      setAgents([]);
+      setVoices([]);
+    }
+    // Reset campaign-dependent fields when call center changes
+    setValue("campaignId", undefined);
+    setValue("agentId", undefined);
+    setSelectedCampaignId(undefined);
+
+  }, [currentCallCenter]);
 
   const { control, handleSubmit, register, watch, formState: { errors }, setValue } = useForm<BotGenerationFormData>({
     resolver: zodResolver(botGenerationSchema),
@@ -141,7 +159,6 @@ export default function BotGenerationPage() {
   const generationType = watch("generationType");
   const watchedCampaignId = watch("campaignId");
 
-  // Filter agents based on selected campaign (which is already filtered by call center)
   const availableAgentsForCampaign = agents.filter(agent => agent.campaignId === watchedCampaignId);
 
   useEffect(() => {
@@ -156,7 +173,13 @@ export default function BotGenerationPage() {
     setIsLoading(true);
     setGeneratedBots([]);
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+
+    if (!currentCallCenter) {
+      toast({ title: "Error", description: "No call center selected.", variant: "destructive"});
+      setIsLoading(false);
+      return;
+    }
 
     const newBots: Bot[] = [];
     const selectedCampaign = campaigns.find(c => c.id === data.campaignId);
@@ -167,7 +190,6 @@ export default function BotGenerationPage() {
       return;
     }
     
-    // Agents are already filtered by call center via the selected campaign's call center.
     const agentsForThisCampaign = agents.filter(a => a.campaignId === selectedCampaign.id);
 
     if (agentsForThisCampaign.length === 0 && data.generationType !== "individual") {
@@ -193,7 +215,7 @@ export default function BotGenerationPage() {
       }
       
       if (!agentIdToUse) {
-         toast({ title: "Error", description: `Could not determine agent for bot ${i + 1}.`, variant: "destructive"});
+         toast({ title: "Error", description: `Could not determine agent for bot ${i + 1}. Ensure agents are configured.`, variant: "destructive"});
          continue; 
       }
 
@@ -204,37 +226,76 @@ export default function BotGenerationPage() {
         agentId: agentIdToUse!,
         status: "active",
         creationDate: new Date().toISOString(),
-        callCenterId: selectedCampaign.callCenterId, // Assign callCenterId from campaign
+        callCenterId: currentCallCenter.id, 
       });
     }
-
+    // In a real app, these new bots would be saved to a backend.
+    // For mock purposes, we can add them to a global list if we want them to persist across navigations,
+    // but for this page, just setting local state is fine to show the result.
     setGeneratedBots(newBots);
     if (newBots.length > 0) {
       toast({ title: "Bots Generated Successfully!", description: `${newBots.length} bot(s) have been created.` });
-    } else {
-      toast({ title: "Bot Generation Issue", description: "No bots were generated. Please check configuration.", variant: "default"});
+    } else if(count > 0) { // If tried to generate but none were created
+      toast({ title: "Bot Generation Issue", description: "No bots were generated. Please check configuration and ensure agents are available for the campaign.", variant: "default"});
     }
     setIsLoading(false);
   };
 
   const getAgentDetails = (agentId: string) => {
-    const agent = agents.find(a => a.id === agentId);
+    const agent = agents.find(a => a.id === agentId); // agents state is already filtered
     if (!agent) return "Unknown Agent";
-    // Ensure voices are also filtered/accessible for the current call center context
-    const voice = voices.find(v => v.id === agent.voiceId && v.callCenterId === agent.callCenterId);
-    const campaign = campaigns.find(c => c.id === agent.campaignId);
+    const voice = voices.find(v => v.id === agent.voiceId); // voices state is already filtered
+    const campaign = campaigns.find(c => c.id === agent.campaignId); // campaigns state is already filtered
     const scriptVariant = campaign?.scriptVariants?.find(sv => sv.id === agent.scriptVariantId);
     return `${agent.name} (Script: ${scriptVariant?.name || 'N/A'}, Voice: ${voice?.name || 'N/A'})`;
   };
 
+  if (isCallCenterLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-9 w-3/4 md:w-1/2" />
+        <Card className="shadow-lg">
+          <CardHeader>
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-4 w-3/4 mt-1" />
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-10 w-1/2" />
+          </CardContent>
+          <CardFooter className="border-t pt-6">
+            <Skeleton className="h-10 w-36" />
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+
+  if (!currentCallCenter) {
+     return (
+       <div className="space-y-6">
+        <h2 className="text-3xl font-bold tracking-tight">Bot Generation</h2>
+         <Card className="shadow-lg">
+            <CardHeader>
+                <CardTitle>No Call Center Selected</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p>Please select a call center from the header or <Link href="/call-centers" className="text-primary underline">add and select a call center</Link> to use Bot Generation.</p>
+            </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold tracking-tight">Bot Generation ({mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name || 'Selected Call Center'})</h2>
+      <h2 className="text-3xl font-bold tracking-tight">Bot Generation ({currentCallCenter.name})</h2>
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Configure and Generate Bots</CardTitle>
-          <CardDescription>Streamline the process of deploying new bots for your campaigns within the selected call center.</CardDescription>
+          <CardDescription>Streamline the process of deploying new bots for your campaigns within {currentCallCenter.name}.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
@@ -245,17 +306,15 @@ export default function BotGenerationPage() {
                 control={control}
                 render={({ field }) => (
                   <Select 
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                    }} 
-                    defaultValue={field.value}
-                    value={field.value}
+                    onValueChange={(value) => { field.onChange(value); }} 
+                    value={field.value || ""} // Ensure value is controlled
+                    disabled={campaigns.length === 0}
                   >
                     <SelectTrigger className="w-full mt-1">
-                      <SelectValue placeholder="Choose a campaign" />
+                      <SelectValue placeholder={campaigns.length === 0 ? "No campaigns for this call center" : "Choose a campaign"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {campaigns.map(campaign => ( // Campaigns are already filtered by call center
+                      {campaigns.map(campaign => (
                         <SelectItem key={campaign.id} value={campaign.id}>{campaign.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -263,6 +322,7 @@ export default function BotGenerationPage() {
                 )}
               />
               {errors.campaignId && <p className="text-sm text-destructive mt-1">{errors.campaignId.message}</p>}
+              {campaigns.length === 0 && <p className="text-xs text-muted-foreground mt-1">No campaigns available for '{currentCallCenter.name}'. Please <Link href="/campaigns" className="underline text-primary">create a campaign</Link> first.</p>}
             </div>
 
             <div>
@@ -299,14 +359,17 @@ export default function BotGenerationPage() {
                     name="agentId"
                     control={control}
                     render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={!watchedCampaignId || availableAgentsForCampaign.length === 0}>
+                    <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || ""}  // Ensure value is controlled
+                        disabled={!watchedCampaignId || availableAgentsForCampaign.length === 0}
+                    >
                         <SelectTrigger className="w-full mt-1">
                         <SelectValue placeholder={!watchedCampaignId ? "Select a campaign first" : (availableAgentsForCampaign.length === 0 ? "No agents for this campaign" : "Choose an agent configuration")} />
                         </SelectTrigger>
                         <SelectContent>
                         {availableAgentsForCampaign.map(agent => {
                             const voice = voices.find(v => v.id === agent.voiceId);
-                            // Campaign already filtered by call center
                             const campaign = campaigns.find(c => c.id === agent.campaignId); 
                             const scriptVariant = campaign?.scriptVariants?.find(sv => sv.id === agent.scriptVariantId);
                             return (
@@ -320,8 +383,8 @@ export default function BotGenerationPage() {
                     )}
                 />
                 {errors.agentId && <p className="text-sm text-destructive mt-1">{errors.agentId.message}</p>}
-                 {!watchedCampaignId && <p className="text-xs text-muted-foreground mt-1">Please select a campaign to see available agents.</p>}
-                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-muted-foreground mt-1">No agent configurations found for the selected campaign in this call center.</p>}
+                 {!watchedCampaignId && campaigns.length > 0 && <p className="text-xs text-muted-foreground mt-1">Please select a campaign to see available agents.</p>}
+                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-muted-foreground mt-1">No agent configurations found for the selected campaign in this call center. Agents define the script and voice for a bot.</p>}
               </div>
             )}
 
@@ -336,13 +399,22 @@ export default function BotGenerationPage() {
                     <Label htmlFor="botNamePrefix">Bot Name Prefix (Optional)</Label>
                     <Input id="botNamePrefix" {...register("botNamePrefix")} className="mt-1" placeholder="e.g., CampaignXBot" disabled={!watchedCampaignId}/>
                 </div>
-                 {!watchedCampaignId && <p className="text-xs text-muted-foreground mt-1 col-span-full">Please select a campaign first to enable bulk generation.</p>}
-                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-muted-foreground mt-1 col-span-full">Warning: No agent configurations found for the selected campaign. Bots may not be generated correctly.</p>}
+                 {!watchedCampaignId && campaigns.length > 0 && <p className="text-xs text-muted-foreground mt-1 col-span-full">Please select a campaign first to enable bulk generation.</p>}
+                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-warning-foreground mt-1 col-span-full bg-warning/20 p-2 rounded-md">Warning: No agent configurations found for the selected campaign. Bots cannot be generated without agents.</p>}
               </div>
             )}
           </CardContent>
           <CardFooter className="border-t pt-6">
-            <Button type="submit" disabled={isLoading || !watchedCampaignId || (generationType==='individual' && !watch("agentId"))} className="w-full md:w-auto">
+            <Button 
+                type="submit" 
+                disabled={
+                    isLoading || 
+                    !watchedCampaignId || 
+                    (generationType === 'individual' && !watch("agentId")) ||
+                    (generationType !== 'individual' && availableAgentsForCampaign.length === 0 && campaigns.length > 0) // Disable bulk if campaign selected but no agents
+                } 
+                className="w-full md:w-auto"
+            >
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Cpu className="mr-2 h-4 w-4" />}
               Generate Bots
             </Button>
@@ -354,7 +426,7 @@ export default function BotGenerationPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Generated Bots</CardTitle>
-            <CardDescription>{generatedBots.length} bot(s) were created successfully for {mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name}.</CardDescription>
+            <CardDescription>{generatedBots.length} bot(s) were created successfully for {currentCallCenter.name}.</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
@@ -364,7 +436,7 @@ export default function BotGenerationPage() {
                     <p className="font-semibold">{bot.name}</p>
                     <p className="text-xs text-muted-foreground">Campaign: {campaigns.find(c=>c.id === bot.campaignId)?.name}</p>
                     <p className="text-xs text-muted-foreground">Agent Config: {getAgentDetails(bot.agentId)}</p>
-                     <p className="text-xs text-muted-foreground">Call Center ID: {bot.callCenterId}</p>
+                     <p className="text-xs text-muted-foreground">Call Center: {currentCallCenter.name}</p>
                   </div>
                   <Badge variant={bot.status === "active" ? "default" : "secondary"}>{bot.status}</Badge>
                 </li>
