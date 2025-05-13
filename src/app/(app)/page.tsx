@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Activity, Users, PhoneCall, Target, Bot, Zap } from "lucide-react";
+import { Activity, Users, PhoneCall, Target, Bot, Zap, Megaphone } from "lucide-react"; // Added Megaphone
 import { useEffect, useState } from "react";
 
 // Mock data for charts - ensure this runs client-side
@@ -139,3 +139,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
