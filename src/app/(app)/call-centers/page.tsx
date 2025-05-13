@@ -16,6 +16,7 @@ import { useCallCenter } from "@/contexts/CallCenterContext";
 import type { CallCenter } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils"; // Added import for cn
 
 const callCenterSchema = z.object({
   name: z.string().min(3, "Call center name must be at least 3 characters"),
