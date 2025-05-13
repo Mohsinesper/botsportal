@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Wand2, Lightbulb, BarChart } from "lucide-react";
-import { suggestAgentOptimization, type AgentOptimizationInput, type AgentOptimizationOutput } from "@/ai/flows/agent-optimization-suggestions";
+import type { AgentOptimizationInput, AgentOptimizationOutput } from "@/ai/flows/agent-optimization-suggestions";
+import { handleSuggestOptimization } from "./actions"; // Updated import
 import { toast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -36,17 +37,6 @@ const agentOptimizationSchema = z.object({
 
 type AgentOptimizationFormData = z.infer<typeof agentOptimizationSchema>;
 
-// Server action to call the Genkit flow
-async function handleSuggestOptimization(data: AgentOptimizationInput): Promise<AgentOptimizationOutput | { error: string }> {
-  "use server";
-  try {
-    const result = await suggestAgentOptimization(data);
-    return result;
-  } catch (error) {
-    console.error("Error suggesting agent optimization:", error);
-    return { error: error instanceof Error ? error.message : "An unknown error occurred." };
-  }
-}
 
 function parsePerformanceData(dataString: string): Record<string, Record<string, number>> {
   const performanceMap: Record<string, Record<string, number>> = {};

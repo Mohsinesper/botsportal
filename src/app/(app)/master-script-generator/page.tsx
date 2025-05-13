@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -12,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Wand2, Copy } from "lucide-react";
-import { generateMasterScript, type MasterScriptInput, type MasterScriptOutput } from "@/ai/flows/master-script-generator";
+import type { MasterScriptInput, MasterScriptOutput } from "@/ai/flows/master-script-generator";
+import { handleGenerateScript } from "./actions"; 
 import { toast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -26,18 +26,6 @@ const masterScriptSchema = z.object({
 });
 
 type MasterScriptFormData = z.infer<typeof masterScriptSchema>;
-
-// Server action to call the Genkit flow
-async function handleGenerateScript(data: MasterScriptInput): Promise<MasterScriptOutput | { error: string }> {
-  "use server";
-  try {
-    const result = await generateMasterScript(data);
-    return result;
-  } catch (error) {
-    console.error("Error generating master script:", error);
-    return { error: error instanceof Error ? error.message : "An unknown error occurred." };
-  }
-}
 
 export default function MasterScriptGeneratorPage() {
   const [isLoading, setIsLoading] = useState(false);
