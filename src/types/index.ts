@@ -1,8 +1,19 @@
 
+export type UserRole = "SUPER_ADMIN" | "CALL_CENTER_ADMIN" | "DESIGN_ADMIN";
+
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  role: UserRole;
+  assignedCallCenterIds?: string[]; // Relevant for CALL_CENTER_ADMIN and DESIGN_ADMIN
+}
+
 export interface CallCenter {
   id: string;
   name: string;
   location?: string; // Optional: location of the call center
+  // createdByUserId?: string; // Optional: if tracking who created it
 }
 
 export interface ScriptVariant {
@@ -18,51 +29,52 @@ export interface Campaign {
   targetAudience: string;
   callObjective: string;
   createdDate: string;
-  callCenterId: string; // Added for multi-tenancy
-  conversionRate?: number; // Optional: for display
+  callCenterId: string; 
+  conversionRate?: number; 
   masterScript?: string;
   scriptVariants?: ScriptVariant[];
-  // The 'tone' could be part of campaign settings or prompted during script generation
+  // createdByUserId?: string;
 }
 
 export interface Voice {
   id: string;
   name: string;
-  provider?: string; // e.g., "ElevenLabs", "GoogleTTS"
-  settings?: Record<string, any>; // For voice-specific configurations
-  callCenterId: string; // Added for multi-tenancy
+  provider?: string; 
+  settings?: Record<string, any>; 
+  callCenterId: string; 
+  // createdByUserId?: string;
 }
 
 export interface Agent {
   id: string;
-  name: string; // e.g., "Summer Sale - Variant 1 - Ava Friendly"
+  name: string; 
   campaignId: string;
-  scriptVariantId: string; // ID of the ScriptVariant from the campaign's scriptVariants array
+  scriptVariantId: string; 
   voiceId: string;
-  callCenterId: string; // Added for multi-tenancy (derived from campaign)
-  performanceMetric?: number; // e.g., conversion rate
+  callCenterId: string; 
+  performanceMetric?: number;
+  // createdByUserId?: string;
 }
 
 export interface Bot {
   id: string;
   name: string;
   campaignId: string;
-  agentId: string; // The AI agent configuration used by this bot
+  agentId: string; 
   status: "active" | "inactive" | "error";
   creationDate: string;
-  callCenterId: string; // Added for multi-tenancy (derived from campaign)
+  callCenterId: string; 
   lastActivity?: string;
+  // createdByUserId?: string;
 }
 
-// This Script type can be used if scripts are managed as separate entities
-// For now, masterScript (string) and ScriptVariant[] are directly on Campaign
 export interface Script {
   id: string;
   name: string;
   content: string;
   isMaster: boolean;
-  parentId?: string; // For variants, linking to master
+  parentId?: string; 
   createdDate: string;
-  campaignId: string; // Link script to a campaign
-  // callCenterId would be implicitly through campaign
+  campaignId: string; 
 }
+

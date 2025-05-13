@@ -6,8 +6,9 @@ import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 import { Bot, Zap, Megaphone, PhoneCall } from "lucide-react"; 
 import { useEffect, useState } from "react";
 import type { CallCenter } from "@/types";
-import { useCallCenter } from "@/contexts/CallCenterContext"; // Use the context
+import { useCallCenter } from "@/contexts/CallCenterContext"; 
 import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link"; // Added for linking to call center page
 
 // Mock data for charts - specific to call centers
 const allDailyConversionData: Record<string, { name: string; rate: number }[]> = {
@@ -19,7 +20,7 @@ const allDailyConversionData: Record<string, { name: string; rate: number }[]> =
     { name: 'Mon', rate: 10 }, { name: 'Tue', rate: 17 }, { name: 'Wed', rate: 13 },
     { name: 'Thu', rate: 20 }, { name: 'Fri', rate: 16 }, { name: 'Sat', rate: 23 }, { name: 'Sun', rate: 18 },
   ],
-  cc3: [ // Added for new call center
+  cc3: [ 
     { name: 'Mon', rate: 8 }, { name: 'Tue', rate: 15 }, { name: 'Wed', rate: 11 },
     { name: 'Thu', rate: 18 }, { name: 'Fri', rate: 14 }, { name: 'Sat', rate: 21 }, { name: 'Sun', rate: 17 },
   ],
@@ -34,7 +35,7 @@ const allCampaignPerformanceData: Record<string, { name: string; activeBots: num
     { name: 'Campaign C (CC2)', activeBots: 30, conversions: 150 },
     { name: 'Campaign D (CC2)', activeBots: 75, conversions: 420 },
   ],
-  cc3: [ // Added for new call center
+  cc3: [ 
     { name: 'Campaign E (CC3)', activeBots: 20, conversions: 100 },
     { name: 'Campaign F (CC3)', activeBots: 50, conversions: 280 },
   ],
@@ -177,7 +178,7 @@ export default function DashboardPage() {
                 <CardTitle>No Call Center Selected</CardTitle>
             </CardHeader>
             <CardContent>
-                <p>Please select a call center from the header or <Link href="/call-centers" className="text-primary underline">add a new call center</Link> to view dashboard data.</p>
+                <p>Please select a call center from the header or <Link href="/call-centers" className="text-primary underline">manage call centers</Link> to view dashboard data.</p>
             </CardContent>
         </Card>
       )}
