@@ -20,6 +20,7 @@ import { toast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 const userSchema = z.object({
   id: z.string().optional(),
@@ -138,86 +139,88 @@ export default function UserManagementPage() {
               Manage user accounts and their permissions.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" {...register("name")} className="mt-1" placeholder="e.g., Jane Doe" />
-              {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
-            </div>
-            <div>
-              <Label htmlFor="email">Email Address</Label>
-              <Input id="email" type="email" {...register("email")} className="mt-1" placeholder="e.g., user@example.com" />
-              {errors.email && <p className="text-sm text-destructive mt-1">{errors.email.message}</p>}
-            </div>
-            <div>
-              <Label htmlFor="role">Role</Label>
-              <Controller
-                name="role"
-                control={control}
-                render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger className="w-full mt-1">
-                      <SelectValue placeholder="Select a role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
-                      <SelectItem value="CALL_CENTER_ADMIN">Call Center Admin</SelectItem>
-                      <SelectItem value="DESIGN_ADMIN">Design Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              {errors.role && <p className="text-sm text-destructive mt-1">{errors.role.message}</p>}
-            </div>
-
-            {(selectedRole === "CALL_CENTER_ADMIN" || selectedRole === "DESIGN_ADMIN") && (
+          <Form {...{control, register, handleSubmit, reset, watch, setValue, formState: { errors }}}>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
               <div>
-                <Label>Assigned Call Centers</Label>
-                {allCallCenters.length > 0 ? (
-                  <div className="mt-2 space-y-2 max-h-48 overflow-y-auto border p-3 rounded-md">
-                    {allCallCenters.map((cc) => (
-                      <FormField
-                        key={cc.id}
-                        control={control}
-                        name="assignedCallCenterIds"
-                        render={({ field }) => {
-                          return (
-                            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(cc.id)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...(field.value || []), cc.id])
-                                      : field.onChange(
-                                          (field.value || []).filter(
-                                            (value) => value !== cc.id
-                                          )
-                                        )
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal text-sm">
-                                {cc.name} ({cc.location || 'N/A'})
-                              </FormLabel>
-                            </FormItem>
-                          )
-                        }}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground mt-1">No call centers available to assign. Please <Link href="/call-centers" className="underline">add call centers</Link> first.</p>
-                )}
-                {errors.assignedCallCenterIds && <p className="text-sm text-destructive mt-1">{errors.assignedCallCenterIds.message}</p>}
+                <Label htmlFor="name">Full Name</Label>
+                <Input id="name" {...register("name")} className="mt-1" placeholder="e.g., Jane Doe" />
+                {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
               </div>
-            )}
+              <div>
+                <Label htmlFor="email">Email Address</Label>
+                <Input id="email" type="email" {...register("email")} className="mt-1" placeholder="e.g., user@example.com" />
+                {errors.email && <p className="text-sm text-destructive mt-1">{errors.email.message}</p>}
+              </div>
+              <div>
+                <Label htmlFor="role">Role</Label>
+                <Controller
+                  name="role"
+                  control={control}
+                  render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <SelectTrigger className="w-full mt-1">
+                        <SelectValue placeholder="Select a role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                        <SelectItem value="CALL_CENTER_ADMIN">Call Center Admin</SelectItem>
+                        <SelectItem value="DESIGN_ADMIN">Design Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.role && <p className="text-sm text-destructive mt-1">{errors.role.message}</p>}
+              </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button type="submit">{editingUser ? "Save Changes" : "Add User"}</Button>
-            </DialogFooter>
-          </form>
+              {(selectedRole === "CALL_CENTER_ADMIN" || selectedRole === "DESIGN_ADMIN") && (
+                <div>
+                  <Label>Assigned Call Centers</Label>
+                  {allCallCenters.length > 0 ? (
+                    <div className="mt-2 space-y-2 max-h-48 overflow-y-auto border p-3 rounded-md">
+                      {allCallCenters.map((cc) => (
+                        <FormField
+                          key={cc.id}
+                          control={control}
+                          name="assignedCallCenterIds"
+                          render={({ field }) => {
+                            return (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                <ShadFormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(cc.id)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), cc.id])
+                                        : field.onChange(
+                                            (field.value || []).filter(
+                                              (value) => value !== cc.id
+                                            )
+                                          )
+                                    }}
+                                  />
+                                </ShadFormControl>
+                                <FormLabel className="font-normal text-sm">
+                                  {cc.name} ({cc.location || 'N/A'})
+                                </FormLabel>
+                              </FormItem>
+                            )
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-1">No call centers available to assign. Please <Link href="/call-centers" className="underline">add call centers</Link> first.</p>
+                  )}
+                  {errors.assignedCallCenterIds && <p className="text-sm text-destructive mt-1">{errors.assignedCallCenterIds.message}</p>}
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                <Button type="submit">{editingUser ? "Save Changes" : "Add User"}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 
@@ -253,7 +256,7 @@ export default function UserManagementPage() {
                       <Button variant="ghost" size="sm" onClick={() => handleEdit(user)} className="mr-2" aria-label={`Edit ${user.name}`}>
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(user.id)} className="text-destructive hover:text-destructive" aria-label={`Delete ${user.name}`} disabled={user.id === currentUser.id /* Cannot delete self */}>
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(user.id)} className="text-destructive hover:text-destructive" aria-label={`Delete ${user.name}`} disabled={currentUser?.id === user.id /* Cannot delete self */}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
