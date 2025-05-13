@@ -1,4 +1,10 @@
 
+export interface CallCenter {
+  id: string;
+  name: string;
+  location?: string; // Optional: location of the call center
+}
+
 export interface ScriptVariant {
   id: string;
   name: string;
@@ -12,6 +18,7 @@ export interface Campaign {
   targetAudience: string;
   callObjective: string;
   createdDate: string;
+  callCenterId: string; // Added for multi-tenancy
   conversionRate?: number; // Optional: for display
   masterScript?: string;
   scriptVariants?: ScriptVariant[];
@@ -23,6 +30,7 @@ export interface Voice {
   name: string;
   provider?: string; // e.g., "ElevenLabs", "GoogleTTS"
   settings?: Record<string, any>; // For voice-specific configurations
+  callCenterId: string; // Added for multi-tenancy
 }
 
 export interface Agent {
@@ -31,6 +39,7 @@ export interface Agent {
   campaignId: string;
   scriptVariantId: string; // ID of the ScriptVariant from the campaign's scriptVariants array
   voiceId: string;
+  callCenterId: string; // Added for multi-tenancy (derived from campaign)
   performanceMetric?: number; // e.g., conversion rate
 }
 
@@ -41,6 +50,7 @@ export interface Bot {
   agentId: string; // The AI agent configuration used by this bot
   status: "active" | "inactive" | "error";
   creationDate: string;
+  callCenterId: string; // Added for multi-tenancy (derived from campaign)
   lastActivity?: string;
 }
 
@@ -54,4 +64,5 @@ export interface Script {
   parentId?: string; // For variants, linking to master
   createdDate: string;
   campaignId: string; // Link script to a campaign
+  // callCenterId would be implicitly through campaign
 }

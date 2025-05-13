@@ -13,13 +13,20 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "@/hooks/use-toast";
-import type { Voice } from "@/types";
+import type { Voice, CallCenter } from "@/types";
+
+// Assume a current call center ID. In a real app, this would come from user session/context.
+const MOCK_CURRENT_CALL_CENTER_ID = "cc1";
+
+const mockCallCenters: CallCenter[] = [
+  { id: "cc1", name: "Main Call Center HQ", location: "New York" },
+  { id: "cc2", name: "West Coast Operations", location: "California" },
+];
 
 const voiceSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2, "Voice name must be at least 2 characters"),
   provider: z.string().optional(),
-  // settings could be a JSON string or more structured if needed
   settings: z.string().optional().refine((val) => {
     if (!val) return true;
     try {
@@ -29,24 +36,35 @@ const voiceSchema = z.object({
       return false;
     }
   }, { message: "Settings must be valid JSON or empty"}),
+  callCenterId: z.string().min(1, "Call Center ID is required"),
 });
 
 type VoiceFormData = z.infer<typeof voiceSchema>;
 
-const mockVoices: Voice[] = [
-  { id: "v1", name: "Ava - Friendly Female", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 } },
-  { id: "v2", name: "John - Professional Male", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 } },
-  { id: "v3", name: "Mia - Empathetic Female", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 } },
+const initialMockVoices: Voice[] = [
+  { id: "v1", name: "Ava - Friendly Female (CC1)", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 }, callCenterId: "cc1" },
+  { id: "v2", name: "John - Professional Male (CC1)", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 }, callCenterId: "cc1" },
+  { id: "v3", name: "Mia - Empathetic Female (CC2)", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 }, callCenterId: "cc2" },
+  { id: "v4", name: "Echo - Standard Male (CC2)", provider: "GoogleTTS", settings: { pitch: 0, speed: 1.0 }, callCenterId: "cc2" },
 ];
 
 export default function VoicesPage() {
-  const [voices, setVoices] = useState<Voice[]>(mockVoices);
+  const [voices, setVoices] = useState<Voice[]>(initialMockVoices);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
+  
+  // Simulating a selected call center.
+  const [currentCallCenterId, setCurrentCallCenterId] = useState<string>(MOCK_CURRENT_CALL_CENTER_ID);
+
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<VoiceFormData>({
     resolver: zodResolver(voiceSchema),
-    defaultValues: { name: "", provider: "", settings: "" },
+    defaultValues: { 
+      name: "", 
+      provider: "", 
+      settings: "",
+      callCenterId: currentCallCenterId, 
+    },
   });
 
   const onSubmit = (data: VoiceFormData) => {
@@ -54,6 +72,7 @@ export default function VoicesPage() {
       ...data,
       id: editingVoice ? editingVoice.id : `v${Date.now()}`,
       settings: data.settings ? JSON.parse(data.settings) : undefined,
+      callCenterId: data.callCenterId, // Ensure callCenterId is part of the data
     };
 
     if (editingVoice) {
@@ -64,7 +83,7 @@ export default function VoicesPage() {
       toast({ title: "Voice Added", description: `Voice "${voiceData.name}" added.` });
     }
     setIsDialogOpen(false);
-    reset();
+    reset({ name: "", provider: "", settings: "", callCenterId: currentCallCenterId });
     setEditingVoice(null);
   };
 
@@ -74,6 +93,7 @@ export default function VoicesPage() {
       name: voice.name,
       provider: voice.provider,
       settings: voice.settings ? JSON.stringify(voice.settings, null, 2) : "",
+      callCenterId: voice.callCenterId,
     });
     setIsDialogOpen(true);
   };
@@ -82,13 +102,18 @@ export default function VoicesPage() {
     setVoices(voices.filter(v => v.id !== id));
     toast({ title: "Voice Deleted", variant: "destructive" });
   };
-
+  
+  const filteredVoices = voices.filter(v => v.callCenterId === currentCallCenterId);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold tracking-tight">Voice Management</h2>
-        <Button onClick={() => { setEditingVoice(null); reset(); setIsDialogOpen(true); }}>
+        <h2 className="text-3xl font-bold tracking-tight">Voice Management ({mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name || 'Selected Call Center'})</h2>
+        <Button onClick={() => { 
+          setEditingVoice(null); 
+          reset({ name: "", provider: "", settings: "", callCenterId: currentCallCenterId }); 
+          setIsDialogOpen(true); 
+        }}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add Voice
         </Button>
       </div>
@@ -97,14 +122,19 @@ export default function VoicesPage() {
         setIsDialogOpen(isOpen);
         if (!isOpen) {
           setEditingVoice(null);
-          reset();
+          reset({ name: "", provider: "", settings: "", callCenterId: currentCallCenterId });
         }
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editingVoice ? "Edit Voice" : "Add New Voice"}</DialogTitle>
+            <DialogDescription>
+              This voice will be associated with the '{mockCallCenters.find(cc => cc.id === (editingVoice?.callCenterId || currentCallCenterId))?.name || 'current call center'}'.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+            {/* Hidden Call Center ID field */}
+            <input type="hidden" {...register("callCenterId")} />
             <div>
               <Label htmlFor="name">Voice Name</Label>
               <Input id="name" {...register("name")} className="mt-1" />
@@ -144,7 +174,7 @@ export default function VoicesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {voices.length > 0 ? voices.map((voice) => (
+              {filteredVoices.length > 0 ? filteredVoices.map((voice) => (
                 <TableRow key={voice.id}>
                   <TableCell className="font-medium">{voice.name}</TableCell>
                   <TableCell>{voice.provider || "N/A"}</TableCell>
@@ -162,7 +192,7 @@ export default function VoicesPage() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center h-24">No voices configured yet.</TableCell>
+                  <TableCell colSpan={4} className="text-center h-24">No voices configured for this call center yet.</TableCell>
                 </TableRow>
               )}
             </TableBody>

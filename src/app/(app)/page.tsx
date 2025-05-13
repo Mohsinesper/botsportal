@@ -1,27 +1,39 @@
 
-"use client"; // For charts and potential client-side interactions
+"use client"; 
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Activity, Users, PhoneCall, Target, Bot, Zap, Megaphone } from "lucide-react"; // Added Megaphone
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'; // Aliased BarChart to avoid conflict
+import { Activity, Users, PhoneCall, Target, Bot, Zap, Megaphone } from "lucide-react"; 
 import { useEffect, useState } from "react";
+import type { CallCenter } from "@/types";
 
-// Mock data for charts - ensure this runs client-side
-const dailyConversionData = [
-  { name: 'Mon', rate: 12 },
-  { name: 'Tue', rate: 19 },
-  { name: 'Wed', rate: 15 },
-  { name: 'Thu', rate: 22 },
-  { name: 'Fri', rate: 18 },
-  { name: 'Sat', rate: 25 },
-  { name: 'Sun', rate: 20 },
+// Assume a current call center ID. In a real app, this would come from user session/context.
+const MOCK_CURRENT_CALL_CENTER_ID = "cc1";
+
+const mockCallCenters: CallCenter[] = [
+  { id: "cc1", name: "Main Call Center HQ", location: "New York" },
+  { id: "cc2", name: "West Coast Operations", location: "California" },
 ];
 
-const campaignPerformanceData = [
-  { name: 'Campaign A', activeBots: 40, conversions: 200 },
-  { name: 'Campaign B', activeBots: 60, conversions: 350 },
-  { name: 'Campaign C', activeBots: 30, conversions: 150 },
-  { name: 'Campaign D', activeBots: 75, conversions: 420 },
+
+// Mock data for charts - ensure this runs client-side
+// This data should ideally be fetched or filtered based on MOCK_CURRENT_CALL_CENTER_ID
+const dailyConversionDataCc1 = [
+  { name: 'Mon', rate: 12 }, { name: 'Tue', rate: 19 }, { name: 'Wed', rate: 15 },
+  { name: 'Thu', rate: 22 }, { name: 'Fri', rate: 18 }, { name: 'Sat', rate: 25 }, { name: 'Sun', rate: 20 },
+];
+const dailyConversionDataCc2 = [
+  { name: 'Mon', rate: 10 }, { name: 'Tue', rate: 17 }, { name: 'Wed', rate: 13 },
+  { name: 'Thu', rate: 20 }, { name: 'Fri', rate: 16 }, { name: 'Sat', rate: 23 }, { name: 'Sun', rate: 18 },
+];
+
+const campaignPerformanceDataCc1 = [
+  { name: 'Campaign A (CC1)', activeBots: 40, conversions: 200 },
+  { name: 'Campaign B (CC1)', activeBots: 60, conversions: 350 },
+];
+const campaignPerformanceDataCc2 = [
+  { name: 'Campaign C (CC2)', activeBots: 30, conversions: 150 },
+  { name: 'Campaign D (CC2)', activeBots: 75, conversions: 420 },
 ];
 
 interface MetricCardProps {
@@ -48,12 +60,28 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, description, icon
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
+  // Simulating a selected call center.
+  const [currentCallCenterId, setCurrentCallCenterId] = useState<string>(MOCK_CURRENT_CALL_CENTER_ID);
+  
+  const currentCallCenter = mockCallCenters.find(cc => cc.id === currentCallCenterId);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Select data based on currentCallCenterId
+  const dailyConversionData = currentCallCenterId === "cc1" ? dailyConversionDataCc1 : dailyConversionDataCc2;
+  const campaignPerformanceData = currentCallCenterId === "cc1" ? campaignPerformanceDataCc1 : campaignPerformanceDataCc2;
+  
+  // Metrics would also be call-center specific
+  const metrics = {
+    cc1: { totalBots: "1,250", activeCampaigns: "15", conversionRate: "18.5%", totalCalls: "250,600" },
+    cc2: { totalBots: "850", activeCampaigns: "10", conversionRate: "16.2%", totalCalls: "180,300" },
+  };
+  const currentMetrics = currentCallCenterId === "cc1" ? metrics.cc1 : metrics.cc2;
+
+
   if (!mounted) {
-    // Render skeleton or minimal content before client-side hydration
     return (
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -80,20 +108,20 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold tracking-tight">Dashboard Overview</h2>
+      <h2 className="text-3xl font-bold tracking-tight">Dashboard Overview ({currentCallCenter?.name || 'Selected Call Center'})</h2>
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard title="Total Bots Deployed" value="1,250" description="+20.1% from last month" icon={Bot} />
-        <MetricCard title="Active Campaigns" value="15" description="2 currently pending" icon={Megaphone} />
-        <MetricCard title="Overall Conversion Rate" value="18.5%" description="+2.3% this week" icon={Zap} />
-        <MetricCard title="Total Calls Handled" value="250,600" description="Average 8.2k calls/day" icon={PhoneCall} />
+        <MetricCard title="Total Bots Deployed" value={currentMetrics.totalBots} description="+20.1% from last month" icon={Bot} />
+        <MetricCard title="Active Campaigns" value={currentMetrics.activeCampaigns} description="2 currently pending" icon={Megaphone} />
+        <MetricCard title="Overall Conversion Rate" value={currentMetrics.conversionRate} description="+2.3% this week" icon={Zap} />
+        <MetricCard title="Total Calls Handled" value={currentMetrics.totalCalls} description="Average 8.2k calls/day" icon={PhoneCall} />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Daily Conversion Rate</CardTitle>
-            <CardDescription>Performance over the last 7 days.</CardDescription>
+            <CardDescription>Performance over the last 7 days for {currentCallCenter?.name}.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -116,11 +144,11 @@ export default function DashboardPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Campaign Performance</CardTitle>
-            <CardDescription>Active bots and conversions by campaign.</CardDescription>
+            <CardDescription>Active bots and conversions by campaign for {currentCallCenter?.name}.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={campaignPerformanceData}>
+              <RechartsBarChart data={campaignPerformanceData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" stroke="hsl(var(--foreground))" fontSize={12} />
                 <YAxis stroke="hsl(var(--foreground))" fontSize={12} />
@@ -131,7 +159,7 @@ export default function DashboardPage() {
                 <Legend wrapperStyle={{fontSize: "12px"}} />
                 <Bar dataKey="activeBots" name="Active Bots" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="conversions" name="Conversions" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              </RechartsBarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -139,4 +167,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

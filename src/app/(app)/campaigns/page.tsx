@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye } from "lucide-react";
-import type { Campaign, ScriptVariant } from "@/types";
+import type { Campaign, ScriptVariant, CallCenter } from "@/types";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -21,17 +21,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { handleGenerateCampaignScripts } from "./actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+// Assume a current call center ID for now. In a real app, this would come from user session/context.
+const MOCK_CURRENT_CALL_CENTER_ID = "cc1";
+
+const mockCallCenters: CallCenter[] = [
+  { id: "cc1", name: "Main Call Center HQ", location: "New York" },
+  { id: "cc2", name: "West Coast Operations", location: "California" },
+];
+
 const campaignSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
   status: z.enum(["active", "paused", "archived", "draft"]),
   targetAudience: z.string().min(10, "Target audience description is required"),
   callObjective: z.string().min(5, "Call objective is required"),
-  // Fields for script generation
+  callCenterId: z.string().min(1, "Call Center ID is required"),
   tone: z.string().min(3, "Tone for script generation is required"),
   variantCount: z.coerce.number().int().min(1).max(5).default(3),
-  // productDescription will be taken from a general description field or targetAudience/callObjective combined.
-  // For simplicity, let's assume callObjective + targetAudience can serve as productDescription context for AI.
 });
 
 type CampaignFormData = z.infer<typeof campaignSchema>;
@@ -42,6 +48,9 @@ export default function CampaignsPage() {
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [viewingScriptsCampaign, setViewingScriptsCampaign] = useState<Campaign | null>(null);
+  
+  // Simulating a selected call center.
+  const [currentCallCenterId, setCurrentCallCenterId] = useState<string>(MOCK_CURRENT_CALL_CENTER_ID);
 
   const { control, handleSubmit, register, reset, formState: { errors }, setValue } = useForm<CampaignFormData>({
     resolver: zodResolver(campaignSchema),
@@ -50,6 +59,7 @@ export default function CampaignsPage() {
       status: "draft",
       targetAudience: "",
       callObjective: "",
+      callCenterId: currentCallCenterId,
       tone: "Professional",
       variantCount: 3,
     }
@@ -57,9 +67,10 @@ export default function CampaignsPage() {
   
   useEffect(() => {
     const fetchedCampaigns: Campaign[] = [
-      { id: "1", name: "Summer Sale Promo", status: "active", targetAudience: "Existing customers aged 25-40 interested in tech.", callObjective: "Promote new summer discounts and drive sales.", createdDate: new Date().toISOString(), conversionRate: 22.5, masterScript: "Hello [Customer Name], this is a call about our amazing Summer Sale!", scriptVariants: [{id: "sv1-1", name: "Variant 1", content: "Summer Sale Variant 1 content..."}]},
-      { id: "2", name: "New Product Launch", status: "paused", targetAudience: "New leads from recent marketing campaign.", callObjective: "Introduce new product and generate qualified leads.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), conversionRate: 15.2 },
-      { id: "3", name: "Customer Feedback Drive", status: "draft", targetAudience: "Customers who purchased in the last 3 months.", callObjective: "Gather feedback on recent purchases and identify areas for improvement.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString() },
+      { id: "1", name: "Summer Sale Promo CC1", status: "active", targetAudience: "Existing customers aged 25-40 interested in tech.", callObjective: "Promote new summer discounts and drive sales.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, masterScript: "Hello [Customer Name], this is a call about our amazing Summer Sale!", scriptVariants: [{id: "sv1-1", name: "Variant 1", content: "Summer Sale Variant 1 content..."}]},
+      { id: "2", name: "New Product Launch CC1", status: "paused", targetAudience: "New leads from recent marketing campaign.", callObjective: "Introduce new product and generate qualified leads.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2 },
+      { id: "3", name: "Customer Feedback Drive CC2", status: "draft", targetAudience: "Customers who purchased in the last 3 months.", callObjective: "Gather feedback on recent purchases and identify areas for improvement.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2" },
+      { id: "4", name: "Winter Special CC1", status: "archived", targetAudience: "All subscribers in cold regions.", callObjective: "Promote winter heating solutions.", createdDate: new Date(Date.now() - 86400000 * 20).toISOString(), callCenterId: "cc1", masterScript: "Stay warm this winter with our new heaters!", scriptVariants: [] },
     ];
     setCampaigns(fetchedCampaigns);
   }, []);
@@ -70,7 +81,7 @@ export default function CampaignsPage() {
     
     const scriptGenerationInput = {
       campaignData: {
-        productDescription: `${data.callObjective}. Target: ${data.targetAudience}`, // Combine fields for product description context
+        productDescription: `${data.callObjective}. Target: ${data.targetAudience}`,
         targetAudience: data.targetAudience,
         callObjective: data.callObjective,
         tone: data.tone,
@@ -94,16 +105,18 @@ export default function CampaignsPage() {
       }));
     }
 
+    const campaignDataWithCallCenter = {
+      ...data,
+      callCenterId: data.callCenterId || currentCallCenterId, // Ensure callCenterId is set
+    };
+
     if (editingCampaign) {
-      setCampaigns(campaigns.map(c => c.id === editingCampaign.id ? { ...editingCampaign, ...data, masterScript: masterScript ?? editingCampaign.masterScript, scriptVariants: scriptVariants ?? editingCampaign.scriptVariants } : c));
+      setCampaigns(campaigns.map(c => c.id === editingCampaign.id ? { ...editingCampaign, ...campaignDataWithCallCenter, masterScript: masterScript ?? editingCampaign.masterScript, scriptVariants: scriptVariants ?? editingCampaign.scriptVariants } : c));
       toast({ title: "Campaign Updated", description: `Campaign "${data.name}" has been successfully updated.`});
     } else {
       const newCampaign: Campaign = {
         id: campaignId,
-        name: data.name,
-        status: data.status,
-        targetAudience: data.targetAudience,
-        callObjective: data.callObjective,
+        ...campaignDataWithCallCenter,
         createdDate: new Date().toISOString(),
         masterScript,
         scriptVariants,
@@ -114,18 +127,14 @@ export default function CampaignsPage() {
     
     setIsGeneratingScripts(false);
     setIsDialogOpen(false);
-    reset();
+    reset({ ...campaignSchema.shape, callCenterId: currentCallCenterId }); // Reset with current call center
     setEditingCampaign(null);
   };
 
   const handleEdit = (campaign: Campaign) => {
     setEditingCampaign(campaign);
     reset({
-      id: campaign.id,
-      name: campaign.name,
-      status: campaign.status,
-      targetAudience: campaign.targetAudience,
-      callObjective: campaign.callObjective,
+      ...campaign, // Spread all campaign fields
       tone: "Professional", // Default or fetch if stored
       variantCount: campaign.scriptVariants?.length || 3,
     });
@@ -143,10 +152,15 @@ export default function CampaignsPage() {
   };
 
   const openScriptGenerationDialog = (campaign: Campaign) => {
-    setEditingCampaign(campaign); // Set for context, dialog will primarily focus on tone/variant count
-    setValue("tone", "Professional"); // Reset or load from campaign if stored
+    setEditingCampaign(campaign); 
+    setValue("tone", "Professional"); 
     setValue("variantCount", campaign.scriptVariants?.length || 3);
-    setIsDialogOpen(true); // Re-use the main dialog, but it will act as script generator
+    setValue("name", campaign.name);
+    setValue("targetAudience", campaign.targetAudience);
+    setValue("callObjective", campaign.callObjective);
+    setValue("status", campaign.status);
+    setValue("callCenterId", campaign.callCenterId);
+    setIsDialogOpen(true); 
   };
   
   const statusBadgeVariant = (status: Campaign["status"]) => {
@@ -154,7 +168,7 @@ export default function CampaignsPage() {
       case "active": return "default";
       case "paused": return "secondary";
       case "archived": return "outline";
-      case "draft": return "outline";
+      case "draft": return "outline"; // Consider a "info" or "warning" variant for draft
       default: return "outline";
     }
   };
@@ -164,15 +178,21 @@ export default function CampaignsPage() {
       case "active": return <Play className="mr-2 h-4 w-4" />;
       case "paused": return <Pause className="mr-2 h-4 w-4" />;
       case "archived": return <Archive className="mr-2 h-4 w-4" />;
-      default: return null;
+      default: return null; // Or a specific icon for "draft"
     }
   };
+
+  const filteredCampaigns = campaigns.filter(c => c.callCenterId === currentCallCenterId);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold tracking-tight">Campaign Management</h2>
-        <Button onClick={() => { setEditingCampaign(null); reset({name: "", status: "draft", targetAudience: "", callObjective: "", tone: "Professional", variantCount: 3}); setIsDialogOpen(true); }}>
+        <h2 className="text-3xl font-bold tracking-tight">Campaign Management ({mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name || 'Selected Call Center'})</h2>
+        <Button onClick={() => { 
+          setEditingCampaign(null); 
+          reset({name: "", status: "draft", targetAudience: "", callObjective: "", callCenterId: currentCallCenterId, tone: "Professional", variantCount: 3}); 
+          setIsDialogOpen(true); 
+        }}>
           <PlusCircle className="mr-2 h-4 w-4" /> Create Campaign
         </Button>
       </div>
@@ -181,7 +201,7 @@ export default function CampaignsPage() {
         setIsDialogOpen(isOpen);
         if (!isOpen) {
           setEditingCampaign(null);
-          reset();
+          reset({ ...campaignSchema.shape, callCenterId: currentCallCenterId });
         }
       }}>
         <DialogContent className="sm:max-w-lg">
@@ -189,9 +209,13 @@ export default function CampaignsPage() {
             <DialogTitle>{editingCampaign ? "Edit Campaign & Scripts" : "Create New Campaign & Generate Scripts"}</DialogTitle>
             <DialogDescription>
               {editingCampaign ? "Update campaign details and re-generate scripts." : "Fill in details to create a campaign and generate initial scripts."}
+              {" "}Campaigns will be associated with '{mockCallCenters.find(cc => cc.id === (editingCampaign?.callCenterId || currentCallCenterId))?.name || 'current call center'}'.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+            {/* Hidden Call Center ID field, or could be a selector if users can change it */}
+            <input type="hidden" {...register("callCenterId")} />
+
             <div>
               <Label htmlFor="name">Campaign Name</Label>
               <Input id="name" {...register("name")} className="mt-1" />
@@ -213,7 +237,7 @@ export default function CampaignsPage() {
                 name="status"
                 control={control}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                     <SelectTrigger className="w-full mt-1">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
@@ -240,7 +264,7 @@ export default function CampaignsPage() {
                       name="tone"
                       control={control}
                       render={({ field }) => (
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                           <SelectTrigger className="w-full mt-1">
                           <SelectValue placeholder="Select tone" />
                           </SelectTrigger>
@@ -275,7 +299,6 @@ export default function CampaignsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* View Scripts Dialog */}
       <Dialog open={!!viewingScriptsCampaign} onOpenChange={(isOpen) => { if(!isOpen) setViewingScriptsCampaign(null); }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -322,7 +345,6 @@ export default function CampaignsPage() {
         </DialogContent>
       </Dialog>
 
-
       <Card className="shadow-lg">
         <CardContent className="p-0">
           <Table>
@@ -337,7 +359,7 @@ export default function CampaignsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {campaigns.length > 0 ? campaigns.map((campaign) => (
+              {filteredCampaigns.length > 0 ? filteredCampaigns.map((campaign) => (
                 <TableRow key={campaign.id}>
                   <TableCell className="font-medium">{campaign.name}</TableCell>
                   <TableCell>
@@ -389,7 +411,7 @@ export default function CampaignsPage() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24">No campaigns found. Create one to get started!</TableCell>
+                  <TableCell colSpan={6} className="text-center h-24">No campaigns found for this call center. Create one to get started!</TableCell>
                 </TableRow>
               )}
             </TableBody>

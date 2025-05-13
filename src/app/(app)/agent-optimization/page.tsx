@@ -15,9 +15,15 @@ import type { AgentOptimizationInput, AgentOptimizationOutput } from "@/ai/flows
 import { handleSuggestOptimization } from "./actions";
 import { toast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
-// Assuming Campaign, ScriptVariant, Voice types are imported or available
-// For now, we'll continue with string inputs for script variants and voices
-// but conceptually, these would be IDs linking to actual ScriptVariant and Voice objects.
+import type { CallCenter } from "@/types";
+
+// Assume a current call center ID. In a real app, this would come from user session/context.
+const MOCK_CURRENT_CALL_CENTER_ID = "cc1";
+
+const mockCallCenters: CallCenter[] = [
+  { id: "cc1", name: "Main Call Center HQ", location: "New York" },
+  { id: "cc2", name: "West Coast Operations", location: "California" },
+];
 
 // Example: "Welcome Script Variant 1:Ava - Friendly Female:0.75,Sales Pitch Variant 2:John - Professional Male:0.82"
 const performanceDataSchema = z.string().refine(
@@ -26,7 +32,6 @@ const performanceDataSchema = z.string().refine(
     const entries = data.split(',');
     return entries.every(entry => {
       const parts = entry.split(':');
-      // Now expects ScriptVariantName:VoiceName:PerformanceMetric
       return parts.length === 3 && !isNaN(parseFloat(parts[2]));
     });
   },
@@ -50,8 +55,8 @@ function parsePerformanceData(dataString: string): Record<string, Record<string,
   entries.forEach(entry => {
     const parts = entry.split(':');
     if (parts.length === 3) {
-      const scriptVariantName = parts[0].trim(); // This is now just a name, not necessarily an ID from a list
-      const voiceName = parts[1].trim(); // This is now just a name
+      const scriptVariantName = parts[0].trim(); 
+      const voiceName = parts[1].trim(); 
       const metric = parseFloat(parts[2]);
       if (!isNaN(metric)) {
         if (!performanceMap[scriptVariantName]) {
@@ -69,13 +74,18 @@ export default function AgentOptimizationPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<AgentOptimizationOutput["suggestions"] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Simulating a selected call center.
+  const [currentCallCenterId, setCurrentCallCenterId] = useState<string>(MOCK_CURRENT_CALL_CENTER_ID);
+
 
   const { handleSubmit, register, formState: { errors } } = useForm<AgentOptimizationFormData>({
     resolver: zodResolver(agentOptimizationSchema),
+    // Default values should ideally reflect data from the MOCK_CURRENT_CALL_CENTER_ID
     defaultValues: {
-      scriptVariants: "Welcome Script Variant 1, Sales Pitch Variant A, Closing Script Variant X",
-      voices: "Ava (Friendly Female), John (Professional Male), Mia (Empathetic Female)",
-      performanceData: "Welcome Script Variant 1:Ava (Friendly Female):0.65, Welcome Script Variant 1:John (Professional Male):0.60, Sales Pitch Variant A:Ava (Friendly Female):0.72, Sales Pitch Variant A:John (Professional Male):0.78, Closing Script Variant X:Mia (Empathetic Female):0.85",
+      scriptVariants: "Welcome Script (CC1), Sales Pitch (CC1), Closing Script (CC1)",
+      voices: "Ava (CC1 Friendly), John (CC1 Pro), Mia (CC1 Empathetic)", // Assuming these voices belong to CC1
+      performanceData: "Welcome Script (CC1):Ava (CC1 Friendly):0.65, Welcome Script (CC1):John (CC1 Pro):0.60, Sales Pitch (CC1):Ava (CC1 Friendly):0.72, Sales Pitch (CC1):John (CC1 Pro):0.78, Closing Script (CC1):Mia (CC1 Empathetic):0.85",
     }
   });
 
@@ -86,12 +96,15 @@ export default function AgentOptimizationPage() {
 
     // The AI flow expects arrays of strings for script variants and voices.
     // These strings are treated as identifiers/names by the AI.
+    // In a multi-call center setup, ensure these names are relevant to the currentCallCenterId.
     const inputForAI: AgentOptimizationInput = {
       scriptVariants: data.scriptVariants.split(',').map(s => s.trim()),
       voices: data.voices.split(',').map(v => v.trim()),
       performanceData: parsePerformanceData(data.performanceData),
     };
 
+    // The handleSuggestOptimization action doesn't explicitly take callCenterId,
+    // but the data it processes (script/voice names, performance) should be from that call center.
     const result = await handleSuggestOptimization(inputForAI);
 
     if ("error" in result) {
@@ -109,11 +122,15 @@ export default function AgentOptimizationPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold tracking-tight">AI Agent Optimization</h2>
+      <h2 className="text-3xl font-bold tracking-tight">AI Agent Optimization ({mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name || 'Selected Call Center'})</h2>
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Get AI-Powered Optimization Suggestions</CardTitle>
-          <CardDescription>Input your script variant names, available voice names, and their performance data to receive intelligent suggestions for optimal agent configurations. These names should match those used in the performance data.</CardDescription>
+          <CardDescription>
+            Input your script variant names, available voice names, and their performance data from the 
+            '{mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name || 'current call center'}'
+            to receive intelligent suggestions for optimal agent configurations.
+          </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
@@ -137,7 +154,7 @@ export default function AgentOptimizationPage() {
               />
               {errors.performanceData && <p className="text-sm text-destructive mt-1">{errors.performanceData.message}</p>}
                <p className="text-xs text-muted-foreground mt-1">
-                Provide performance data for script variant-voice combinations. Use a consistent metric (e.g., conversion rate, customer satisfaction score). Ensure names match those entered above.
+                Provide performance data for script variant-voice combinations within the selected call center. Use a consistent metric. Ensure names match those entered above.
               </p>
             </div>
           </CardContent>
@@ -165,7 +182,7 @@ export default function AgentOptimizationPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Optimization Suggestions</CardTitle>
-            <CardDescription>Based on the provided data, here are the AI's top recommendations:</CardDescription>
+            <CardDescription>Based on the provided data for '{mockCallCenters.find(cc => cc.id === currentCallCenterId)?.name}', here are the AI's top recommendations:</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {suggestions.map((suggestion, index) => (
@@ -193,7 +210,7 @@ export default function AgentOptimizationPage() {
             <CardTitle>No specific suggestions generated.</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>The AI could not generate specific suggestions based on the input. Please review your data or try different parameters.</p>
+            <p>The AI could not generate specific suggestions based on the input for this call center. Please review your data or try different parameters.</p>
           </CardContent>
         </Card>
       )}
