@@ -21,6 +21,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+// Required imports for FormField, FormItem, FormControl, FormLabel from shadcn/ui
+import {
+  Form,
+  FormControl as ShadFormControl, // Renamed to avoid conflict if needed elsewhere
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
 
 const userSchema = z.object({
   id: z.string().optional(),
@@ -39,21 +50,21 @@ export default function UserManagementPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const { control, register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<UserFormData>({
+  const formMethods = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
     defaultValues: {
       email: "",
       name: "",
-      role: "DESIGN_ADMIN", // Default role for new users
+      role: "DESIGN_ADMIN", 
       assignedCallCenterIds: [],
     },
   });
 
-  const selectedRole = watch("role");
+  const selectedRole = formMethods.watch("role");
 
   useEffect(() => {
     if (editingUser) {
-      reset({
+      formMethods.reset({
         id: editingUser.id,
         email: editingUser.email,
         name: editingUser.name || "",
@@ -61,12 +72,12 @@ export default function UserManagementPage() {
         assignedCallCenterIds: editingUser.assignedCallCenterIds || [],
       });
     } else {
-      reset({ email: "", name: "", role: "DESIGN_ADMIN", assignedCallCenterIds: [] });
+      formMethods.reset({ email: "", name: "", role: "DESIGN_ADMIN", assignedCallCenterIds: [] });
     }
-  }, [editingUser, reset]);
+  }, [editingUser, formMethods]);
 
   const onSubmit = (data: UserFormData) => {
-    const userDataForStorage: Partial<User> = { // Prepare data for addUser or updateUser
+    const userDataForStorage: Partial<User> = { 
         email: data.email,
         name: data.name,
         role: data.role,
@@ -89,10 +100,8 @@ export default function UserManagementPage() {
     setIsDialogOpen(true);
   };
   
-  // Placeholder for delete, in real app this would be an API call
   const handleDelete = (userId: string) => {
     toast({ title: "Delete Action (Mock)", description: `User ${userId} delete action triggered. Implement actual deletion.`, variant: "destructive"});
-    // Example: setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
   };
 
   const isLoading = isAuthLoading || isCallCenterLoading;
@@ -139,23 +148,23 @@ export default function UserManagementPage() {
               Manage user accounts and their permissions.
             </DialogDescription>
           </DialogHeader>
-          <Form {...{control, register, handleSubmit, reset, watch, setValue, formState: { errors }}}>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <Form {...formMethods}>
+            <form onSubmit={formMethods.handleSubmit(onSubmit)} className="space-y-4 py-4">
               <div>
                 <Label htmlFor="name">Full Name</Label>
-                <Input id="name" {...register("name")} className="mt-1" placeholder="e.g., Jane Doe" />
-                {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
+                <Input id="name" {...formMethods.register("name")} className="mt-1" placeholder="e.g., Jane Doe" />
+                {formMethods.formState.errors.name && <p className="text-sm text-destructive mt-1">{formMethods.formState.errors.name.message}</p>}
               </div>
               <div>
                 <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" {...register("email")} className="mt-1" placeholder="e.g., user@example.com" />
-                {errors.email && <p className="text-sm text-destructive mt-1">{errors.email.message}</p>}
+                <Input id="email" type="email" {...formMethods.register("email")} className="mt-1" placeholder="e.g., user@example.com" />
+                {formMethods.formState.errors.email && <p className="text-sm text-destructive mt-1">{formMethods.formState.errors.email.message}</p>}
               </div>
               <div>
                 <Label htmlFor="role">Role</Label>
                 <Controller
                   name="role"
-                  control={control}
+                  control={formMethods.control}
                   render={({ field }) => (
                     <Select onValueChange={field.onChange} value={field.value}>
                       <SelectTrigger className="w-full mt-1">
@@ -169,7 +178,7 @@ export default function UserManagementPage() {
                     </Select>
                   )}
                 />
-                {errors.role && <p className="text-sm text-destructive mt-1">{errors.role.message}</p>}
+                {formMethods.formState.errors.role && <p className="text-sm text-destructive mt-1">{formMethods.formState.errors.role.message}</p>}
               </div>
 
               {(selectedRole === "CALL_CENTER_ADMIN" || selectedRole === "DESIGN_ADMIN") && (
@@ -180,7 +189,7 @@ export default function UserManagementPage() {
                       {allCallCenters.map((cc) => (
                         <FormField
                           key={cc.id}
-                          control={control}
+                          control={formMethods.control}
                           name="assignedCallCenterIds"
                           render={({ field }) => {
                             return (
@@ -211,7 +220,7 @@ export default function UserManagementPage() {
                   ) : (
                     <p className="text-sm text-muted-foreground mt-1">No call centers available to assign. Please <Link href="/call-centers" className="underline">add call centers</Link> first.</p>
                   )}
-                  {errors.assignedCallCenterIds && <p className="text-sm text-destructive mt-1">{errors.assignedCallCenterIds.message}</p>}
+                  {formMethods.formState.errors.assignedCallCenterIds && <p className="text-sm text-destructive mt-1">{formMethods.formState.errors.assignedCallCenterIds.message}</p>}
                 </div>
               )}
 
@@ -274,15 +283,3 @@ export default function UserManagementPage() {
     </div>
   );
 }
-
-// Required imports for FormField, FormItem, FormControl, FormLabel from shadcn/ui
-import {
-  Form,
-  FormControl as ShadFormControl, // Renamed to avoid conflict if needed elsewhere
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-
