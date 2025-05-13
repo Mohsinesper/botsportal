@@ -17,6 +17,7 @@ import * as z from "zod";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
+import { Card, CardContent } from "@/components/ui/card"; // Added import
 
 const campaignSchema = z.object({
   id: z.string().optional(),
@@ -244,3 +245,4 @@ export default function CampaignsPage() {
     </div>
   );
 }
+
