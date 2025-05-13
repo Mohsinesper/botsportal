@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, BotMessageSquare, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, BotMessageSquare, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2 } from 'lucide-react';
 
 export type NavItem = {
   href: string;
@@ -22,9 +22,9 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Megaphone,
   },
   {
-    href: '/master-script-generator',
-    label: 'Script Generator',
-    icon: FileText,
+    href: '/voices',
+    label: 'Voices',
+    icon: Mic2,
   },
   {
     href: '/agent-optimization',

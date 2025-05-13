@@ -12,26 +12,30 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Wand2, Lightbulb, BarChart } from "lucide-react";
 import type { AgentOptimizationInput, AgentOptimizationOutput } from "@/ai/flows/agent-optimization-suggestions";
-import { handleSuggestOptimization } from "./actions"; // Updated import
+import { handleSuggestOptimization } from "./actions";
 import { toast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+// Assuming Campaign, ScriptVariant, Voice types are imported or available
+// For now, we'll continue with string inputs for script variants and voices
+// but conceptually, these would be IDs linking to actual ScriptVariant and Voice objects.
 
-// Example: "Script A:Voice X:0.75,Script B:Voice Y:0.82"
+// Example: "Welcome Script Variant 1:Ava - Friendly Female:0.75,Sales Pitch Variant 2:John - Professional Male:0.82"
 const performanceDataSchema = z.string().refine(
   (data) => {
-    if (!data.trim()) return true; // Allow empty if not required, or add .min(1) if required
+    if (!data.trim()) return true;
     const entries = data.split(',');
     return entries.every(entry => {
       const parts = entry.split(':');
+      // Now expects ScriptVariantName:VoiceName:PerformanceMetric
       return parts.length === 3 && !isNaN(parseFloat(parts[2]));
     });
   },
-  "Performance data must be in format 'ScriptVariant:Voice:PerformanceMetric', e.g., 'WelcomeScript:Ava:0.75,ProductPitch:John:0.82'"
+  "Performance data must be in format 'ScriptVariantName:VoiceName:PerformanceMetric', e.g., 'WelcomeScriptV1:AvaFriendly:0.75,ProductPitchV2:JohnPro:0.82'"
 );
 
 const agentOptimizationSchema = z.object({
-  scriptVariants: z.string().min(1, "At least one script variant is required (comma-separated)"),
-  voices: z.string().min(1, "At least one voice is required (comma-separated)"),
+  scriptVariants: z.string().min(1, "At least one script variant name is required (comma-separated)"),
+  voices: z.string().min(1, "At least one voice name is required (comma-separated)"),
   performanceData: performanceDataSchema,
 });
 
@@ -46,14 +50,14 @@ function parsePerformanceData(dataString: string): Record<string, Record<string,
   entries.forEach(entry => {
     const parts = entry.split(':');
     if (parts.length === 3) {
-      const scriptVariant = parts[0].trim();
-      const voice = parts[1].trim();
+      const scriptVariantName = parts[0].trim(); // This is now just a name, not necessarily an ID from a list
+      const voiceName = parts[1].trim(); // This is now just a name
       const metric = parseFloat(parts[2]);
       if (!isNaN(metric)) {
-        if (!performanceMap[scriptVariant]) {
-          performanceMap[scriptVariant] = {};
+        if (!performanceMap[scriptVariantName]) {
+          performanceMap[scriptVariantName] = {};
         }
-        performanceMap[scriptVariant][voice] = metric;
+        performanceMap[scriptVariantName][voiceName] = metric;
       }
     }
   });
@@ -69,9 +73,9 @@ export default function AgentOptimizationPage() {
   const { handleSubmit, register, formState: { errors } } = useForm<AgentOptimizationFormData>({
     resolver: zodResolver(agentOptimizationSchema),
     defaultValues: {
-      scriptVariants: "Welcome Script, Sales Pitch, Closing Script",
+      scriptVariants: "Welcome Script Variant 1, Sales Pitch Variant A, Closing Script Variant X",
       voices: "Ava (Friendly Female), John (Professional Male), Mia (Empathetic Female)",
-      performanceData: "Welcome Script:Ava:0.65, Welcome Script:John:0.60, Sales Pitch:Ava:0.72, Sales Pitch:John:0.78, Closing Script:Mia:0.85",
+      performanceData: "Welcome Script Variant 1:Ava (Friendly Female):0.65, Welcome Script Variant 1:John (Professional Male):0.60, Sales Pitch Variant A:Ava (Friendly Female):0.72, Sales Pitch Variant A:John (Professional Male):0.78, Closing Script Variant X:Mia (Empathetic Female):0.85",
     }
   });
 
@@ -80,6 +84,8 @@ export default function AgentOptimizationPage() {
     setError(null);
     setSuggestions(null);
 
+    // The AI flow expects arrays of strings for script variants and voices.
+    // These strings are treated as identifiers/names by the AI.
     const inputForAI: AgentOptimizationInput = {
       scriptVariants: data.scriptVariants.split(',').map(s => s.trim()),
       voices: data.voices.split(',').map(v => v.trim()),
@@ -107,18 +113,18 @@ export default function AgentOptimizationPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Get AI-Powered Optimization Suggestions</CardTitle>
-          <CardDescription>Input your script variants, available voices, and their performance data to receive intelligent suggestions for optimal agent configurations.</CardDescription>
+          <CardDescription>Input your script variant names, available voice names, and their performance data to receive intelligent suggestions for optimal agent configurations. These names should match those used in the performance data.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="scriptVariants">Script Variants (comma-separated)</Label>
-              <Input id="scriptVariants" {...register("scriptVariants")} className="mt-1" placeholder="e.g., Script A, Script B" />
+              <Label htmlFor="scriptVariants">Script Variant Names (comma-separated)</Label>
+              <Input id="scriptVariants" {...register("scriptVariants")} className="mt-1" placeholder="e.g., Welcome Variant 1, Sales Variant A" />
               {errors.scriptVariants && <p className="text-sm text-destructive mt-1">{errors.scriptVariants.message}</p>}
             </div>
             <div>
-              <Label htmlFor="voices">Available Voices (comma-separated)</Label>
-              <Input id="voices" {...register("voices")} className="mt-1" placeholder="e.g., Voice X (Friendly), Voice Y (Authoritative)" />
+              <Label htmlFor="voices">Available Voice Names (comma-separated)</Label>
+              <Input id="voices" {...register("voices")} className="mt-1" placeholder="e.g., Ava Friendly, John Professional" />
               {errors.voices && <p className="text-sm text-destructive mt-1">{errors.voices.message}</p>}
             </div>
             <div>
@@ -127,11 +133,11 @@ export default function AgentOptimizationPage() {
                 id="performanceData" 
                 {...register("performanceData")} 
                 className="mt-1 min-h-[120px]" 
-                placeholder="Format: ScriptVariantName:VoiceName:PerformanceMetric (e.g., 0.75 for 75% conversion). Separate entries with commas. Example: WelcomeScript:Ava:0.65, SalesPitch:John:0.78" 
+                placeholder="Format: ScriptVariantName:VoiceName:PerformanceMetric (e.g., 0.75 for 75% conversion). Separate entries with commas. Example: WelcomeV1:AvaFriendly:0.65, SalesVA:JohnPro:0.78" 
               />
               {errors.performanceData && <p className="text-sm text-destructive mt-1">{errors.performanceData.message}</p>}
                <p className="text-xs text-muted-foreground mt-1">
-                Provide performance data for script-voice combinations. Use a consistent metric (e.g., conversion rate, customer satisfaction score).
+                Provide performance data for script variant-voice combinations. Use a consistent metric (e.g., conversion rate, customer satisfaction score). Ensure names match those entered above.
               </p>
             </div>
           </CardContent>
