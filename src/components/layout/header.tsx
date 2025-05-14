@@ -146,8 +146,10 @@ export function Header() {
                 <div className="text-xs text-muted-foreground">{currentUser.email} ({currentUser.role})</div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>
-                <UserCircle className="mr-2 h-4 w-4" /> Profile
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <UserCircle className="mr-2 h-4 w-4" /> Profile
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
                 <UserCog className="mr-2 h-4 w-4" /> Settings

@@ -41,12 +41,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarContent>
         
         <SidebarFooter className="p-4 mt-auto border-t group-data-[collapsible=icon]:p-2">
-           {/* Example footer content, could be user profile, settings, etc. */}
-           {/* This button shows full text when expanded, icon only when collapsed */}
-          <Button variant="ghost" className="w-full justify-start group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:justify-center">
-            <UserCircle className="h-5 w-5" />
-            <span className="ml-2 group-data-[collapsible=icon]:hidden">User Profile</span>
-          </Button>
+           <Link href="/profile" className="w-full">
+            <Button variant="ghost" className="w-full justify-start group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:justify-center">
+              <UserCircle className="h-5 w-5" />
+              <span className="ml-2 group-data-[collapsible=icon]:hidden">User Profile</span>
+            </Button>
+          </Link>
         </SidebarFooter>
       </Sidebar>
       
