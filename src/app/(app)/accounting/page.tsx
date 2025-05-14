@@ -25,10 +25,12 @@ import { format, parseISO } from 'date-fns';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
+const supportedCurrencies = ["USD", "EUR", "GBP"] as const;
+
 const billingConfigSchema = z.object({
   rateType: z.enum(["per_call", "per_hour", "per_day", "per_month"]),
   amount: z.coerce.number().min(0, "Amount must be non-negative"),
-  currency: z.string().min(3, "Currency code must be 3 characters").max(3, "Currency code must be 3 characters").default("USD"),
+  currency: z.enum(supportedCurrencies, { errorMap: () => ({ message: "Please select a valid currency." }) }).default("USD"),
 });
 type BillingConfigFormData = z.infer<typeof billingConfigSchema>;
 
@@ -326,7 +328,20 @@ export default function AccountingPage() {
             </div>
             <div>
               <Label htmlFor="currency">Currency</Label>
-              <Input id="currency" {...rateForm.register("currency")} placeholder="USD" />
+              <Controller
+                name="currency"
+                control={rateForm.control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger><SelectValue placeholder="Select currency" /></SelectTrigger>
+                    <SelectContent>
+                      {supportedCurrencies.map(curr => (
+                        <SelectItem key={curr} value={curr}>{curr}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               {rateForm.formState.errors.currency && <p className="text-sm text-destructive mt-1">{rateForm.formState.errors.currency.message}</p>}
             </div>
             <DialogFooter>
@@ -420,5 +435,3 @@ export default function AccountingPage() {
     </div>
   );
 }
-
-    
