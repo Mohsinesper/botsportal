@@ -1,3 +1,4 @@
+
 export type UserRole = "SUPER_ADMIN" | "CALL_CENTER_ADMIN" | "DESIGN_ADMIN";
 
 export interface User {
@@ -15,6 +16,7 @@ export interface CallCenter {
   id: string;
   name: string;
   location?: string;
+  status?: "active" | "inactive"; // Added status
   billingConfig?: {
     rateType: BillingRateType;
     amount: number; // e.g., 0.01 for per_call, 10 for per_hour
@@ -96,16 +98,15 @@ export interface Invoice {
   id: string;
   callCenterId: string;
   invoiceNumber: string;
-  issueDate: string;
-  dueDate: string;
+  issueDate: string; // ISO string
+  dueDate: string;   // ISO string
   items: InvoiceLineItem[];
   subtotal: number;
   taxRate?: number; // Optional tax rate as a percentage (e.g., 0.07 for 7%)
   taxAmount?: number;
   total: number;
   status: InvoiceStatus;
-  paidDate?: string;
+  paidDate?: string;  // ISO string
   notes?: string;
-  // paymentMethod?: string; // Example: "Credit Card ending in 1234"
-  // transactionId?: string; // Example: Payment gateway transaction ID
 }
+

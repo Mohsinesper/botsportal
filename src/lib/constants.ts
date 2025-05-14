@@ -1,5 +1,6 @@
+
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase } from 'lucide-react'; // Added CreditCard, Briefcase
+import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase } from 'lucide-react';
 
 export type NavItem = {
   href: string;
@@ -69,5 +70,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'User Management',
     icon: UserCog,
     roles: ["SUPER_ADMIN"],
+  },
+  {
+    href: '/settings', // New Settings Page
+    label: 'Settings',
+    icon: Settings, // Using the existing Settings icon
+    // Accessible to all authenticated users by default, can be restricted if needed
   },
 ];

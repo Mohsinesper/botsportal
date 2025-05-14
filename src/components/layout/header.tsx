@@ -6,7 +6,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuGroup, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Sun, Moon, UserCircle, Building, ChevronsUpDown, Check, Users, LogOut, UserCog } from "lucide-react";
+import { Sun, Moon, UserCircle, Building, ChevronsUpDown, Check, Users, LogOut, UserCog, Search, Settings } from "lucide-react"; // Added Settings icon
 import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/constants";
@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
-
+import { Input } from "@/components/ui/input"; // For search input
 
 function ThemeToggle() {
   const { setTheme, theme } = useTheme();
@@ -45,6 +45,7 @@ export function Header() {
   const pathname = usePathname();
   const { callCenters: accessibleCallCenters, currentCallCenter, setCurrentCallCenterById, isLoading: isCallCenterLoading } = useCallCenter();
   const { currentUser, users: mockUsers, setCurrentUserById: setCurrentMockUserById, isLoading: isAuthLoading } = useAuth();
+  const [callCenterSearch, setCallCenterSearch] = React.useState("");
 
   const currentNavItem = NAV_ITEMS.find(item => item.match ? item.match(pathname) : (item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)));
   const pageTitle = currentNavItem ? currentNavItem.label : "CallFlowAI";
@@ -52,14 +53,21 @@ export function Header() {
 
   const handleCallCenterChange = (callCenterId: string) => {
     setCurrentCallCenterById(callCenterId);
+    setCallCenterSearch(""); // Reset search on select
   };
 
   const handleMockUserChange = (userId: string) => {
     setCurrentMockUserById(userId);
-    // Potentially reset currentCallCenter or let CallCenterContext handle it based on new user's accessibility
   };
   
   const isLoading = isCallCenterLoading || isAuthLoading;
+
+  const filteredAccessibleCallCenters = React.useMemo(() => {
+    if (!callCenterSearch) return accessibleCallCenters;
+    return accessibleCallCenters.filter(center => 
+      center.name.toLowerCase().includes(callCenterSearch.toLowerCase())
+    );
+  }, [accessibleCallCenters, callCenterSearch]);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
@@ -83,11 +91,23 @@ export function Header() {
                 <ChevronsUpDown className="ml-auto h-4 w-4 opacity-50 flex-shrink-0" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[--radix-dropdown-menu-trigger-width]">
-              <DropdownMenuLabel>Switch Call Center</DropdownMenuLabel>
-              <DropdownMenuSeparator />
+            <DropdownMenuContent align="end" className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-[300px] overflow-y-auto">
+              <div className="p-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search call centers..."
+                    value={callCenterSearch}
+                    onChange={(e) => setCallCenterSearch(e.target.value)}
+                    className="w-full pl-8 h-9"
+                    // Prevent dropdown from closing when clicking input
+                    onClick={(e) => e.stopPropagation()} 
+                  />
+                </div>
+              </div>
+              {filteredAccessibleCallCenters.length > 0 && <DropdownMenuSeparator />}
               <DropdownMenuGroup>
-              {accessibleCallCenters.map((center) => (
+              {filteredAccessibleCallCenters.map((center) => (
                 <DropdownMenuItem
                   key={center.id}
                   onClick={() => handleCallCenterChange(center.id)}
@@ -99,6 +119,9 @@ export function Header() {
                   {currentCallCenter.id === center.id && <Check className="ml-auto h-4 w-4" />}
                 </DropdownMenuItem>
               ))}
+               {filteredAccessibleCallCenters.length === 0 && callCenterSearch && (
+                  <DropdownMenuLabel className="text-center text-xs text-muted-foreground">No centers found.</DropdownMenuLabel>
+                )}
               </DropdownMenuGroup>
               {currentUser?.role === "SUPER_ADMIN" && (
                 <>
@@ -133,7 +156,7 @@ export function Header() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={`https://picsum.photos/seed/${currentUser.id}/100/100`} alt={currentUser.name || currentUser.email} data-ai-hint="user avatar" />
+                  <AvatarImage src={`https://picsum.photos/seed/${currentUser.id}/100/100`} alt={currentUser.name || currentUser.email} data-ai-hint="user avatar"/>
                   <AvatarFallback>
                     <UserCircle className="h-6 w-6" />
                   </AvatarFallback>
@@ -151,8 +174,10 @@ export function Header() {
                   <UserCircle className="mr-2 h-4 w-4" /> Profile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <UserCog className="mr-2 h-4 w-4" /> Settings
+              <DropdownMenuItem asChild>
+                <Link href="/settings">
+                  <Settings className="mr-2 h-4 w-4" /> Settings
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
                 <DropdownMenuLabel className="text-xs font-normal">Switch Mock User (Dev)</DropdownMenuLabel>

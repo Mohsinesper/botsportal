@@ -1,29 +1,31 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DollarSign, FileText, AlertTriangle, CheckCircle2, Edit, PlusCircle, CalendarIcon, Settings, FilterX } from "lucide-react";
+import { DollarSign, FileText, AlertTriangle, CheckCircle2, Edit, PlusCircle, CalendarIcon, Settings, FilterX, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { getAllInvoices, updateInvoiceStatus, generateNewInvoice, getInvoiceById } from "@/lib/accounting-mock";
+import { getAllInvoices, updateInvoiceStatus, generateNewInvoice } from "@/lib/accounting-mock";
 import type { Invoice, CallCenter, BillingRateType, InvoiceStatus } from "@/types";
 import { toast } from "@/hooks/use-toast";
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid, startOfMonth, endOfMonth } from 'date-fns';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
+import { DateRange } from "react-day-picker";
 
 const supportedCurrencies = ["USD", "EUR", "GBP"] as const;
 
@@ -42,7 +44,6 @@ const generateInvoiceSchema = z.object({
 });
 type GenerateInvoiceFormData = z.infer<typeof generateInvoiceSchema>;
 
-
 export default function AccountingPage() {
   const { currentUser, isLoading: authLoading } = useAuth();
   const { allCallCenters, updateCallCenterBillingConfig, isLoading: ccLoading } = useCallCenter();
@@ -52,6 +53,13 @@ export default function AccountingPage() {
   const [isRateDialogOpen, setIsRateDialogOpen] = useState(false);
   const [editingRateCallCenter, setEditingRateCallCenter] = useState<CallCenter | null>(null);
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+
+  // Filters for Invoice Management
+  const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "all">("all");
+  const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
+  const [filterCallCenterId, setFilterCallCenterId] = useState<string | "all">("all");
+  const [searchTermInvoices, setSearchTermInvoices] = useState("");
+
 
   const rateForm = useForm<BillingConfigFormData>({
     resolver: zodResolver(billingConfigSchema),
@@ -100,7 +108,7 @@ export default function AccountingPage() {
       toast({ title: "Invoice Generation Failed", description: result.error, variant: "destructive" });
     } else {
       toast({ title: "Invoice Generated", description: `Invoice ${result.invoiceNumber} created.` });
-      setInvoices(getAllInvoices()); // Refresh invoices
+      setInvoices(getAllInvoices()); 
     }
     setIsInvoiceFormOpen(false);
     invoiceForm.reset();
@@ -108,18 +116,52 @@ export default function AccountingPage() {
 
   const handleMarkAsPaid = (invoiceId: string) => {
     updateInvoiceStatus(invoiceId, "paid");
-    setInvoices(getAllInvoices()); // Refresh
+    setInvoices(getAllInvoices()); 
     toast({ title: "Invoice Updated", description: `Invoice marked as paid.` });
   };
 
   const isOverdue = (invoice: Invoice): boolean => {
-    return new Date(invoice.dueDate) < new Date() && invoice.status !== 'paid' && invoice.status !== 'cancelled';
+    try {
+      return new Date(invoice.dueDate) < new Date() && invoice.status !== 'paid' && invoice.status !== 'cancelled';
+    } catch (e) { return false; }
   };
 
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter(inv => {
+      const invoiceIssueDate = parseISO(inv.issueDate);
+      const matchesStatus = filterStatus === "all" || inv.status === filterStatus || (filterStatus === "overdue" && isOverdue(inv));
+      const matchesCallCenter = filterCallCenterId === "all" || inv.callCenterId === filterCallCenterId;
+      const matchesDate = !filterDateRange || !filterDateRange.from || !filterDateRange.to || 
+                          (isValid(invoiceIssueDate) && invoiceIssueDate >= filterDateRange.from && invoiceIssueDate <= filterDateRange.to);
+      const matchesSearch = searchTermInvoices === "" || 
+                            inv.invoiceNumber.toLowerCase().includes(searchTermInvoices.toLowerCase()) ||
+                            (allCallCenters.find(cc => cc.id === inv.callCenterId)?.name.toLowerCase().includes(searchTermInvoices.toLowerCase())) ||
+                            (inv.notes && inv.notes.toLowerCase().includes(searchTermInvoices.toLowerCase()));
+      return matchesStatus && matchesCallCenter && matchesDate && matchesSearch;
+    });
+  }, [invoices, filterStatus, filterDateRange, filterCallCenterId, searchTermInvoices, allCallCenters]);
+
+
   const summary = {
-    totalRevenue: invoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.total, 0),
-    pendingInvoicesCount: invoices.filter(i => i.status === 'pending').length,
-    overdueInvoicesCount: invoices.filter(isOverdue).length,
+    totalRevenue: filteredInvoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.total, 0),
+    pendingInvoicesCount: filteredInvoices.filter(i => i.status === 'pending' && !isOverdue(i)).length,
+    overdueInvoicesCount: filteredInvoices.filter(isOverdue).length,
+  };
+  
+  const invoiceStatusChartData = [
+    { name: 'Paid', count: filteredInvoices.filter(i => i.status === 'paid').length },
+    { name: 'Pending', count: summary.pendingInvoicesCount },
+    { name: 'Overdue', count: summary.overdueInvoicesCount },
+    { name: 'Draft', count: filteredInvoices.filter(i => i.status === 'draft').length },
+    { name: 'Cancelled', count: filteredInvoices.filter(i => i.status === 'cancelled').length },
+  ];
+
+
+  const resetInvoiceFilters = () => {
+    setFilterStatus("all");
+    setFilterDateRange(undefined);
+    setFilterCallCenterId("all");
+    setSearchTermInvoices("");
   };
 
   if (isLoadingData || authLoading || ccLoading) {
@@ -151,32 +193,32 @@ export default function AccountingPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Revenue (Filtered)</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${summary.totalRevenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">From paid invoices</p>
+            <p className="text-xs text-muted-foreground">From paid invoices in current view</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Invoices</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Invoices (Filtered)</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary.pendingInvoicesCount}</div>
-            <p className="text-xs text-muted-foreground">Awaiting payment</p>
+            <p className="text-xs text-muted-foreground">Awaiting payment in current view</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Overdue Invoices</CardTitle>
+            <CardTitle className="text-sm font-medium">Overdue Invoices (Filtered)</CardTitle>
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary.overdueInvoicesCount}</div>
-            <p className="text-xs text-muted-foreground">Past due date</p>
+            <p className="text-xs text-muted-foreground">Past due date in current view</p>
           </CardContent>
         </Card>
       </div>
@@ -190,12 +232,20 @@ export default function AccountingPage() {
         <TabsContent value="overview" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Accounting Overview</CardTitle>
-              <CardDescription>Summary of financial activities and billing status. More charts coming soon.</CardDescription>
+              <CardTitle>Financial Overview</CardTitle>
+              <CardDescription>Summary of invoice statuses based on current filters.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p>Detailed overview statistics and charts will be implemented here.</p>
-              {/* Future: Add charts for revenue trends, payment status distribution, etc. */}
+            <CardContent className="h-[350px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={invoiceStatusChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false}/>
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="count" fill="hsl(var(--primary))" name="Invoice Count" />
+                </BarChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
         </TabsContent>
@@ -240,13 +290,85 @@ export default function AccountingPage() {
             <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                     <CardTitle>Invoice Management</CardTitle>
-                    <CardDescription>View, generate, and manage invoices for all call centers.</CardDescription>
+                    <CardDescription>View, generate, and manage invoices. ({filteredInvoices.length} invoices shown)</CardDescription>
                 </div>
                 <Button onClick={() => { invoiceForm.reset(); setIsInvoiceFormOpen(true); }}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Generate New Invoice
                 </Button>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 p-4 border rounded-lg space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                  <div className="lg:col-span-2">
+                    <Label htmlFor="invoiceSearch">Search Invoices</Label>
+                    <div className="relative">
+                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                       <Input 
+                        id="invoiceSearch"
+                        placeholder="Invoice #, CC Name, Notes..." 
+                        value={searchTermInvoices} 
+                        onChange={(e) => setSearchTermInvoices(e.target.value)}
+                        className="pl-9"
+                        />
+                    </div>
+                  </div>
+                   <div>
+                      <Label htmlFor="filterStatus">Status</Label>
+                      <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as InvoiceStatus | "all")}>
+                        <SelectTrigger id="filterStatus"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Statuses</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                          <SelectItem value="overdue">Overdue</SelectItem>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                   </div>
+                   <div>
+                      <Label htmlFor="filterCallCenter">Call Center</Label>
+                      <Select value={filterCallCenterId} onValueChange={(value) => setFilterCallCenterId(value)}>
+                        <SelectTrigger id="filterCallCenter"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Call Centers</SelectItem>
+                          {allCallCenters.map(cc => <SelectItem key={cc.id} value={cc.id}>{cc.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                   </div>
+                    <div>
+                        <Label>Issue Date Range</Label>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button id="date" variant={"outline"} className={`w-full justify-start text-left font-normal ${!filterDateRange && "text-muted-foreground"}`}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {filterDateRange?.from ? (
+                                        filterDateRange.to ? (
+                                            <>{format(filterDateRange.from, "LLL dd, y")} - {format(filterDateRange.to, "LLL dd, y")}</>
+                                        ) : (
+                                            format(filterDateRange.from, "LLL dd, y")
+                                        )
+                                    ) : (
+                                        <span>Pick a date range</span>
+                                    )}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    initialFocus
+                                    mode="range"
+                                    defaultMonth={filterDateRange?.from}
+                                    selected={filterDateRange}
+                                    onSelect={setFilterDateRange}
+                                    numberOfMonths={2}
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </div>
+                <Button onClick={resetInvoiceFilters} variant="outline" size="sm"><FilterX className="mr-2 h-4 w-4" /> Reset Filters</Button>
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -260,7 +382,7 @@ export default function AccountingPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoices.map((inv) => (
+                  {filteredInvoices.map((inv) => (
                     <TableRow key={inv.id} className={isOverdue(inv) ? "bg-destructive/10" : ""}>
                       <TableCell>{inv.invoiceNumber}</TableCell>
                       <TableCell>{allCallCenters.find(cc => cc.id === inv.callCenterId)?.name || 'Unknown CC'}</TableCell>
@@ -270,11 +392,11 @@ export default function AccountingPage() {
                       <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
                           inv.status === 'paid' ? 'bg-green-100 text-green-700' : 
-                          inv.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 
-                          inv.status === 'overdue' || isOverdue(inv) ? 'bg-red-100 text-red-700' : 
+                          inv.status === 'pending' && !isOverdue(inv) ? 'bg-yellow-100 text-yellow-700' : 
+                          isOverdue(inv) ? 'bg-red-100 text-red-700' : 
                           'bg-gray-100 text-gray-700'
                         }`}>
-                          {isOverdue(inv) && inv.status !== 'paid' ? 'Overdue' : inv.status}
+                          {isOverdue(inv) && inv.status !== 'paid' && inv.status !== 'cancelled' ? 'Overdue' : inv.status}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -283,7 +405,6 @@ export default function AccountingPage() {
                             Mark Paid
                           </Button>
                         )}
-                        {/* Future: View Details button */}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -294,7 +415,6 @@ export default function AccountingPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog for Editing Billing Rate */}
       <Dialog open={isRateDialogOpen} onOpenChange={setIsRateDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -352,7 +472,6 @@ export default function AccountingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog for Generating New Invoice */}
       <Dialog open={isInvoiceFormOpen} onOpenChange={setIsInvoiceFormOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -361,13 +480,13 @@ export default function AccountingPage() {
           </DialogHeader>
           <form onSubmit={invoiceForm.handleSubmit(handleGenerateInvoice)} className="space-y-4">
              <div>
-              <Label htmlFor="callCenterId">Call Center</Label>
+              <Label htmlFor="callCenterIdInv">Call Center</Label>
               <Controller
                 name="callCenterId"
                 control={invoiceForm.control}
                 render={({ field }) => (
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger><SelectValue placeholder="Select call center" /></SelectTrigger>
+                    <SelectTrigger id="callCenterIdInv"><SelectValue placeholder="Select call center" /></SelectTrigger>
                     <SelectContent>
                       {allCallCenters.filter(cc => cc.billingConfig).map(cc => (
                         <SelectItem key={cc.id} value={cc.id}>{cc.name}</SelectItem>
@@ -379,14 +498,14 @@ export default function AccountingPage() {
                {invoiceForm.formState.errors.callCenterId && <p className="text-sm text-destructive mt-1">{invoiceForm.formState.errors.callCenterId.message}</p>}
             </div>
             <div>
-                <Label htmlFor="issueDate">Issue Date</Label>
+                <Label htmlFor="issueDateInv">Issue Date</Label>
                 <Controller
                     name="issueDate"
                     control={invoiceForm.control}
                     render={({ field }) => (
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button variant={"outline"} className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}>
+                                <Button id="issueDateInv" variant={"outline"} className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}>
                                     <CalendarIcon className="mr-2 h-4 w-4" />
                                     {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
                                 </Button>
@@ -400,14 +519,14 @@ export default function AccountingPage() {
                 {invoiceForm.formState.errors.issueDate && <p className="text-sm text-destructive mt-1">{invoiceForm.formState.errors.issueDate.message}</p>}
             </div>
              <div>
-                <Label htmlFor="dueDate">Due Date</Label>
+                <Label htmlFor="dueDateInv">Due Date</Label>
                  <Controller
                     name="dueDate"
                     control={invoiceForm.control}
                     render={({ field }) => (
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button variant={"outline"} className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}>
+                                <Button id="dueDateInv" variant={"outline"} className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}>
                                     <CalendarIcon className="mr-2 h-4 w-4" />
                                     {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
                                 </Button>
@@ -421,8 +540,8 @@ export default function AccountingPage() {
                 {invoiceForm.formState.errors.dueDate && <p className="text-sm text-destructive mt-1">{invoiceForm.formState.errors.dueDate.message}</p>}
             </div>
             <div>
-                <Label htmlFor="notes">Notes (Optional)</Label>
-                <Textarea id="notes" {...invoiceForm.register("notes")} placeholder="Any additional notes for the invoice..."/>
+                <Label htmlFor="notesInv">Notes (Optional)</Label>
+                <Textarea id="notesInv" {...invoiceForm.register("notes")} placeholder="Any additional notes for the invoice..."/>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsInvoiceFormOpen(false)}>Cancel</Button>
@@ -431,7 +550,6 @@ export default function AccountingPage() {
           </form>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

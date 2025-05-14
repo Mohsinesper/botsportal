@@ -1,3 +1,4 @@
+
 import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType } from "@/types";
 
 export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
@@ -5,6 +6,7 @@ export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
     id: "cc1", 
     name: "Main Call Center HQ", 
     location: "New York",
+    status: "active",
     billingConfig: {
       rateType: "per_month",
       amount: 5, // $5 per bot per month
@@ -15,6 +17,7 @@ export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
     id: "cc2", 
     name: "West Coast Operations", 
     location: "California",
+    status: "active",
     billingConfig: {
       rateType: "per_call",
       amount: 0.02, // $0.02 per call
@@ -25,6 +28,7 @@ export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
     id: "cc3", 
     name: "EMEA Support Hub", 
     location: "London",
+    status: "inactive",
     billingConfig: {
       rateType: "per_hour",
       amount: 0.5, // $0.50 per bot active hour
@@ -75,7 +79,7 @@ const generateMockLineItems = (basePrice: number): InvoiceLineItem[] => {
   const unitPrice = basePrice;
   return [
     {
-      id: `li-${Date.now()}`,
+      id: `li-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       description: "Bot Usage Charges (Details approximated for mock)",
       quantity: quantity,
       unitPrice: unitPrice,
