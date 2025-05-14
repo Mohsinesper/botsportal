@@ -68,6 +68,10 @@ export interface Bot {
   creationDate: string;
   callCenterId: string;
   lastActivity?: string;
+  successfulCalls?: number;
+  failedCalls?: number;
+  busyCalls?: number;
+  totalCalls?: number;
 }
 
 export interface Script {

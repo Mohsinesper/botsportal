@@ -10,7 +10,7 @@ import type { Bot, Campaign, Agent, Voice } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, FilterX } from "lucide-react";
+import { CalendarIcon, FilterX, TrendingUp, TrendingDown, PhoneMissed, Phone } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useCallCenter } from "@/contexts/CallCenterContext";
@@ -26,6 +26,12 @@ const allMockBots: Bot[] = Array.from({ length: 75 }, (_, i) => {
     else if (currentCcId === 'cc2') campaignIdSuffix = (i % 2) + 3; // c3, c4
     else campaignIdSuffix = (i % 1) + 5; // c5
 
+    const totalCalls = Math.floor(Math.random() * 451) + 50; // 50-500 calls
+    const successfulCalls = Math.floor(totalCalls * (Math.random() * 0.6 + 0.2)); // 20-80% success
+    const remainingAfterSuccess = totalCalls - successfulCalls;
+    const failedCalls = Math.floor(remainingAfterSuccess * (Math.random() * 0.5 + 0.1)); // 10-60% of remaining are failed
+    const busyCalls = remainingAfterSuccess - failedCalls;
+
     return {
         id: `bot-${i}`,
         name: `Bot ${String(i+1).padStart(3, '0')} (${currentCcId.toUpperCase()})`,
@@ -35,6 +41,10 @@ const allMockBots: Bot[] = Array.from({ length: 75 }, (_, i) => {
         creationDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
         lastActivity: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
         callCenterId: currentCcId,
+        totalCalls,
+        successfulCalls,
+        failedCalls,
+        busyCalls,
     };
 });
 
@@ -271,6 +281,10 @@ export default function BotTrackingPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Creation Date</TableHead>
                   <TableHead>Last Activity</TableHead>
+                  <TableHead className="text-right">Total Calls</TableHead>
+                  <TableHead className="text-right">Successful</TableHead>
+                  <TableHead className="text-right">Failed</TableHead>
+                  <TableHead className="text-right">Busy</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -284,10 +298,14 @@ export default function BotTrackingPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{new Date(bot.creationDate).toLocaleDateString()}</TableCell>
                     <TableCell className="text-muted-foreground">{bot.lastActivity ? new Date(bot.lastActivity).toLocaleString() : "N/A"}</TableCell>
+                    <TableCell className="text-right font-medium">{bot.totalCalls ?? 0}</TableCell>
+                    <TableCell className="text-right text-green-600 dark:text-green-500">{bot.successfulCalls ?? 0}</TableCell>
+                    <TableCell className="text-right text-red-600 dark:text-red-500">{bot.failedCalls ?? 0}</TableCell>
+                    <TableCell className="text-right text-yellow-600 dark:text-yellow-500">{bot.busyCalls ?? 0}</TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center h-24">
+                    <TableCell colSpan={10} className="text-center h-24">
                       {bots.length === 0 ? "No bots found for this call center." : "No bots match your current filters."}
                     </TableCell>
                   </TableRow>
@@ -300,3 +318,4 @@ export default function BotTrackingPage() {
     </div>
   );
 }
+
