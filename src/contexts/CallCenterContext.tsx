@@ -1,10 +1,10 @@
+
 "use client";
 
 import type { CallCenter } from "@/types";
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { MOCK_GLOBAL_CALL_CENTERS } from "@/lib/mock-data";
-import { useAuth } from "./AuthContext"; // Import useAuth
-// import { updateCallCenterBillingConfigInMock } from "@/lib/accounting-mock"; // For later use
+import { useAuth } from "./AuthContext";
 
 interface CallCenterContextType {
   callCenters: CallCenter[]; 
@@ -12,6 +12,7 @@ interface CallCenterContextType {
   currentCallCenter: CallCenter | null;
   setCurrentCallCenterById: (id: string | null) => void;
   addCallCenter: (newCallCenterData: Omit<CallCenter, "id" | "billingConfig"> & { billingConfig?: CallCenter['billingConfig'] }) => void;
+  updateCallCenter: (updatedCallCenterData: CallCenter) => void; // Added
   updateCallCenterBillingConfig: (callCenterId: string, config: CallCenter['billingConfig']) => CallCenter | undefined;
   isLoading: boolean; 
 }
@@ -136,13 +137,13 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
     const newCallCenter: CallCenter = {
       ...newCallCenterData,
       id: `cc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      billingConfig: newCallCenterData.billingConfig || { rateType: "per_month", amount: 0, currency: "USD" } // Default billing config
+      billingConfig: newCallCenterData.billingConfig || { rateType: "per_month", amount: 0, currency: "USD" }
     };
     setAllCallCentersState(prev => {
         const updatedCenters = [...prev, newCallCenter];
         if (currentUser?.role === "SUPER_ADMIN") {
-            setAccessibleCallCenters(updatedCenters);
-            if (!currentCallCenter || accessibleCallCenters.length === 0) {
+            setAccessibleCallCenters(updatedCenters); // Super admin sees all
+            if (!currentCallCenter || accessibleCallCenters.length === 0) { // Set as current if none or no accessible ones before
                 setCurrentCallCenter(newCallCenter);
                 try {
                     localStorage.setItem(CURRENT_CALL_CENTER_ID_STORAGE_KEY, newCallCenter.id);
@@ -153,6 +154,27 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
         }
         return updatedCenters;
     });
+  };
+
+  const updateCallCenter = (updatedData: CallCenter) => {
+    if (currentUser?.role !== "SUPER_ADMIN") return;
+
+    setAllCallCentersState(prevAll => 
+      prevAll.map(cc => (cc.id === updatedData.id ? updatedData : cc))
+    );
+
+    setAccessibleCallCenters(prevAcc => {
+      // If super admin, accessible is all
+      if (currentUser?.role === "SUPER_ADMIN") {
+        return allCallCentersState.map(cc => (cc.id === updatedData.id ? updatedData : cc));
+      }
+      // For other roles, update if it's in their accessible list
+      return prevAcc.map(cc => (cc.id === updatedData.id ? updatedData : cc));
+    });
+    
+    if (currentCallCenter?.id === updatedData.id) {
+      setCurrentCallCenter(updatedData);
+    }
   };
 
   const updateCallCenterBillingConfig = (
@@ -170,8 +192,14 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
       });
       return newAll;
     });
-    // Also update accessibleCallCenters if the updated one is in there
+    
     setAccessibleCallCenters(prevAcc => {
+       if (currentUser?.role === "SUPER_ADMIN") {
+        return allCallCentersState.map(cc => {
+            if (cc.id === callCenterId && updatedCenter) return updatedCenter;
+            return cc;
+        });
+      }
       return prevAcc.map(cc => {
         if (cc.id === callCenterId && updatedCenter) {
           return updatedCenter;
@@ -179,7 +207,7 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
         return cc;
       });
     });
-    // If the current call center is the one being updated
+    
     if (currentCallCenter?.id === callCenterId && updatedCenter) {
       setCurrentCallCenter(updatedCenter);
     }
@@ -194,6 +222,7 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
         currentCallCenter, 
         setCurrentCallCenterById, 
         addCallCenter, 
+        updateCallCenter,
         updateCallCenterBillingConfig,
         isLoading 
     }}>
@@ -209,3 +238,4 @@ export const useCallCenter = () => {
   }
   return context;
 };
+

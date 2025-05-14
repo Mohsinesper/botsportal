@@ -7,13 +7,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusCircle, Building, MapPin, Edit2, Trash2 } from "lucide-react";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useAuth } from "@/contexts/AuthContext";
 import type { CallCenter } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,15 +28,17 @@ type CallCenterFormData = z.infer<typeof callCenterSchema>;
 
 export default function CallCentersPage() {
   const { 
-    callCenters: accessibleCallCenters, // Renamed for clarity: these are ACCESSIBLE ones
-    allCallCenters, // All CCs in the system
+    callCenters: accessibleCallCenters,
+    allCallCenters,
     addCallCenter, 
+    updateCallCenter, // Added updateCallCenter
     setCurrentCallCenterById, 
     currentCallCenter, 
     isLoading: isCallCenterLoading 
   } = useCallCenter();
   const { currentUser, isLoading: isAuthLoading } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingCallCenter, setEditingCallCenter] = useState<CallCenter | null>(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CallCenterFormData>({
     resolver: zodResolver(callCenterSchema),
@@ -45,18 +47,48 @@ export default function CallCentersPage() {
 
   const onSubmit = (data: CallCenterFormData) => {
     if (currentUser?.role !== "SUPER_ADMIN") {
-      toast({ title: "Permission Denied", description: "Only Super Admins can add call centers.", variant: "destructive"});
+      toast({ title: "Permission Denied", description: "Only Super Admins can modify call centers.", variant: "destructive"});
       return;
     }
-    addCallCenter(data);
-    toast({ title: "Call Center Added", description: `"${data.name}" has been successfully added.` });
+
+    if (editingCallCenter) {
+      const updatedCenter: CallCenter = { 
+        ...editingCallCenter, 
+        name: data.name, 
+        location: data.location || "" // Ensure location is string or empty string
+      };
+      updateCallCenter(updatedCenter);
+      toast({ title: "Call Center Updated", description: `"${data.name}" has been successfully updated.` });
+    } else {
+      addCallCenter(data);
+      toast({ title: "Call Center Added", description: `"${data.name}" has been successfully added.` });
+    }
+    
     setIsDialogOpen(false);
-    reset();
+    setEditingCallCenter(null);
+    reset({ name: "", location: "" });
   };
 
-  const isLoading = isCallCenterLoading || isAuthLoading;
+  const handleAddNew = () => {
+    setEditingCallCenter(null);
+    reset({ name: "", location: "" });
+    setIsDialogOpen(true);
+  };
 
-  // Display all call centers for Super Admin, otherwise only accessible ones
+  const handleEdit = (center: CallCenter) => {
+    setEditingCallCenter(center);
+    reset({ name: center.name, location: center.location || "" });
+    setIsDialogOpen(true);
+  };
+  
+  const handleDialogClose = () => {
+    setIsDialogOpen(false);
+    setEditingCallCenter(null);
+    reset({ name: "", location: "" });
+  };
+
+
+  const isLoading = isCallCenterLoading || isAuthLoading;
   const displayCallCenters = currentUser?.role === "SUPER_ADMIN" ? allCallCenters : accessibleCallCenters;
 
   if (isLoading) {
@@ -92,18 +124,18 @@ export default function CallCentersPage() {
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold tracking-tight">Manage Call Centers</h2>
         {currentUser?.role === "SUPER_ADMIN" && (
-          <Button onClick={() => { reset(); setIsDialogOpen(true); }}>
+          <Button onClick={handleAddNew}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Call Center
           </Button>
         )}
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add New Call Center</DialogTitle>
+            <DialogTitle>{editingCallCenter ? "Edit Call Center" : "Add New Call Center"}</DialogTitle>
             <DialogDescription>
-              Enter the details for the new call center.
+              {editingCallCenter ? "Update the details for this call center." : "Enter the details for the new call center."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
@@ -118,8 +150,8 @@ export default function CallCentersPage() {
               {errors.location && <p className="text-sm text-destructive mt-1">{errors.location.message}</p>}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button type="submit">Add Call Center</Button>
+              <Button type="button" variant="outline" onClick={handleDialogClose}>Cancel</Button>
+              <Button type="submit">{editingCallCenter ? "Save Changes" : "Add Call Center"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -152,11 +184,9 @@ export default function CallCentersPage() {
                     key={center.id} 
                     className={cn(
                       "cursor-pointer hover:bg-muted/50",
-                      // Highlight if it's the current active AND it's in the accessible list for non-super-admins
                       (currentCallCenter?.id === center.id && (currentUser?.role === "SUPER_ADMIN" || accessibleCallCenters.some(acc => acc.id === center.id))) && "bg-accent/50 hover:bg-accent/60"
                     )}
                     onClick={() => {
-                      // Allow selection only if it's an accessible center
                       if (currentUser?.role === "SUPER_ADMIN" || accessibleCallCenters.some(acc => acc.id === center.id)) {
                         setCurrentCallCenterById(center.id);
                       } else {
@@ -185,14 +215,14 @@ export default function CallCentersPage() {
                     </TableCell>
                     {currentUser?.role === "SUPER_ADMIN" && 
                       <TableCell className="text-xs text-muted-foreground">
-                        {/* Mock display of who is assigned */}
-                        {allCallCenters.filter(u => u.id === center.id).length > 0 ? "Assigned" : "N/A"}
+                        {/* Mock display - this logic needs refinement if actual user assignments are tracked */}
+                        {allCallCenters.some(c => c.id === center.id) ? "Present" : "N/A"}
                       </TableCell>
                     }
                     <TableCell className="text-right">
                       {currentUser?.role === "SUPER_ADMIN" ? (
                         <>
-                          <Button variant="ghost" size="sm" onClick={(e) => {e.stopPropagation(); toast({title: "Edit Clicked", description: "Edit functionality to be implemented."})}} className="mr-2" aria-label={`Edit ${center.name}`}>
+                          <Button variant="ghost" size="sm" onClick={(e) => {e.stopPropagation(); handleEdit(center);}} className="mr-2" aria-label={`Edit ${center.name}`}>
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="sm" onClick={(e) => {e.stopPropagation(); toast({title: "Delete Clicked", description: "Delete functionality to be implemented.", variant: "destructive"})}} className="text-destructive hover:text-destructive" aria-label={`Delete ${center.name}`}>
