@@ -10,14 +10,15 @@ import type { Bot, Campaign, Agent, Voice, ScriptVariant } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, FilterX, PhoneCall } from "lucide-react";
+import { CalendarIcon, FilterX, PhoneCall, MoreHorizontal, Play, Pause, PowerOff } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
-import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES, MOCK_BOTS } from "@/lib/mock-data"; // Import centralized mock data
+import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES, MOCK_BOTS } from "@/lib/mock-data";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 
 export default function BotTrackingPage() {
@@ -106,6 +107,19 @@ export default function BotTrackingPage() {
     toast({
       title: "Mock Call Initiated (Simulated)",
       description: `Bot: ${bot.name}\nAgent: ${agentName}\nScript: ${scriptName}\nVoice: ${voiceName}`,
+    });
+  };
+
+  const handleSetBotStatus = (botId: string, newStatus: Bot["status"]) => {
+    const botIndexGlobal = MOCK_BOTS.findIndex(b => b.id === botId);
+    if (botIndexGlobal !== -1) {
+      MOCK_BOTS[botIndexGlobal].status = newStatus;
+    }
+
+    setBots(prevBots => prevBots.map(b => b.id === botId ? { ...b, status: newStatus } : b));
+    toast({
+      title: "Bot Status Updated",
+      description: `Bot is now ${newStatus}.`,
     });
   };
   
@@ -266,9 +280,41 @@ export default function BotTrackingPage() {
                     <TableCell className="text-right text-red-600 dark:text-red-500">{bot.failedCalls ?? 0}</TableCell>
                     <TableCell className="text-right text-yellow-600 dark:text-yellow-500">{bot.busyCalls ?? 0}</TableCell>
                     <TableCell className="text-center">
-                        <Button variant="ghost" size="icon" onClick={() => handleMockCall(bot)} title="Mock Call (Simulated)">
-                            <PhoneCall className="h-4 w-4" />
-                        </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Bot Actions</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => handleMockCall(bot)}>
+                            <PhoneCall className="mr-2 h-4 w-4" />
+                            Mock Call
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {bot.status !== "active" && (
+                            <DropdownMenuItem onClick={() => handleSetBotStatus(bot.id, "active")}>
+                              <Play className="mr-2 h-4 w-4" />
+                              Set Active
+                            </DropdownMenuItem>
+                          )}
+                          {bot.status === "active" && (
+                            <DropdownMenuItem onClick={() => handleSetBotStatus(bot.id, "inactive")}>
+                              <Pause className="mr-2 h-4 w-4" />
+                              Set Inactive
+                            </DropdownMenuItem>
+                          )}
+                           {/* Optionally add an error state toggle if needed for testing */}
+                           {/* {bot.status !== "error" && (
+                            <DropdownMenuItem onClick={() => handleSetBotStatus(bot.id, "error")}>
+                              <PowerOff className="mr-2 h-4 w-4 text-destructive" />
+                              Set Error (Mock)
+                            </DropdownMenuItem>
+                          )} */}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 )) : (
@@ -286,3 +332,6 @@ export default function BotTrackingPage() {
     </div>
   );
 }
+
+
+    
