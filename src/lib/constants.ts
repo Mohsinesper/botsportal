@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase, Settings2, History } from 'lucide-react';
+import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase, Settings2, History, PieChart } from 'lucide-react';
 
 export type NavItem = {
   href: string;
@@ -48,6 +48,12 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
   },
   {
+    href: '/agent-call-analysis',
+    label: 'Agent Call Analysis',
+    icon: PieChart, // Or TrendingDown
+    roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
+  },
+  {
     href: '/bot-generation',
     label: 'Bot Generation',
     icon: Cpu,
@@ -62,7 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/call-logs',
     label: 'Call Logs',
-    icon: History, // Using History icon for logs
+    icon: History, 
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN"],
   },
   {
@@ -84,14 +90,8 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN"],
   },
   {
-    href: 'https://your-grafana-instance.com', // Replace with your actual Grafana URL
+    href: 'https://your-grafana-instance.com', 
     label: 'Grafana Tool',
-    icon: BarChart3, // Example icon, choose one that fits
-    // Roles: Define if needed, otherwise accessible to all logged-in users
+    icon: BarChart3, 
   },
-  // {
-  //   href: '/settings', // Settings link removed from sidebar
-  //   label: 'Settings',
-  //   icon: Settings,
-  // },
 ];

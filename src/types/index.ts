@@ -194,3 +194,18 @@ export interface DNCRecord {
   addedByUserId?: string; // For manual additions later
   callCenterIdSource?: string; // Which call center's interaction led to DNC
 }
+
+// For Agent Call Analysis
+export interface CallFlowStepAnalysis {
+  stepKey: string;
+  stepDescription: string;
+  callsReached: number;
+  callsDropped: number;
+  dropRate: number;
+}
+
+export interface CampaignDropAnalysis {
+  campaignName: string;
+  totalInitialCalls: number;
+  stepsAnalysis: CallFlowStepAnalysis[];
+}
