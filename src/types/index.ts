@@ -93,12 +93,12 @@ export interface Agent {
   id: string;
   name: string;
   campaignId: string; 
+  scriptVariantId?: string; 
   voiceId: string;
+  backgroundNoise?: string; 
+  backgroundNoiseVolume?: number; 
   callCenterId: string;
   performanceMetric?: number;
-  scriptVariantId?: string; 
-  backgroundNoise?: string; // e.g., "None", "Cafe Ambience", "Office Hum"
-  backgroundNoiseVolume?: number; // e.g., 0-100
 }
 
 export interface Bot {
@@ -150,4 +150,47 @@ export interface Invoice {
   status: InvoiceStatus;
   paidDate?: string;  // ISO string
   notes?: string;
+}
+
+// New Types for Call Logs and DNC
+export type CallResult = 
+  | "answered_success" // Lead answered, positive outcome from script
+  | "answered_dnc_requested" // Lead answered, requested DNC
+  | "answered_declined" // Lead answered, declined offer/service
+  | "busy"
+  | "failed_technical" // e.g. invalid number, network error
+  | "voicemail_left"
+  | "voicemail_full"
+  | "no_answer"
+  | "blocked_by_dnc"; // Call was not initiated due to DNC
+
+export interface CallLog {
+  id: string;
+  callCenterId: string;
+  botId: string;
+  botName: string; // Denormalized for easier display
+  campaignId: string;
+  campaignName: string; // Denormalized
+  leadId: string; // Assuming leads have IDs
+  leadName: string;
+  leadPhoneNumber: string;
+  leadCity?: string;
+  leadAge?: number;
+  callStartTime: string; // ISO string
+  callEndTime?: string;  // ISO string, optional if call didn't connect
+  callDurationSeconds?: number; // Calculated if start and end time exist
+  callResult: CallResult;
+  recordingUrl?: string; // Placeholder for mock recording link
+  notes?: string; // Any notes from the call, e.g., reason for DNC
+  markedDNC: boolean; // True if this call resulted in the number being added to DNC
+}
+
+export interface DNCRecord {
+  phoneNumber: string; // Primary key
+  reason?: string;
+  addedDate: string; // ISO string
+  sourceCallLogId?: string; // If added as a result of a call
+  addedByBotId?: string;
+  addedByUserId?: string; // For manual additions later
+  callCenterIdSource?: string; // Which call center's interaction led to DNC
 }

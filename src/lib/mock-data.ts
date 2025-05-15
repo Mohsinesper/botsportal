@@ -1,5 +1,5 @@
 
-import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow } from "@/types";
+import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow, CallLog, DNCRecord, CallResult } from "@/types";
 
 // Example Call Flow (Master)
 const exampleMasterCallFlow: CallFlow = {
@@ -229,4 +229,93 @@ export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
         activeDutyStartTime: (i % 5 === 0) ? "09:00" : undefined, // Add for some bots
         activeDutyEndTime: (i % 5 === 0) ? "17:00" : undefined,   // Add for some bots
     };
+});
+
+// Mock DNC List
+export const MOCK_DNC_LIST: DNCRecord[] = [
+  { phoneNumber: "555-0100-0000", reason: "User requested DNC", addedDate: new Date(Date.now() - 86400000 * 10).toISOString(), sourceCallLogId: "cl-dnc1", callCenterIdSource: "cc1" },
+  { phoneNumber: "555-0101-0001", reason: "Repeatedly hung up", addedDate: new Date(Date.now() - 86400000 * 5).toISOString(), addedByBotId: MOCK_BOTS[2]?.id, callCenterIdSource: "cc2" },
+  { phoneNumber: "555-0102-0002", addedDate: new Date(Date.now() - 86400000 * 2).toISOString(), callCenterIdSource: "cc1" },
+];
+
+// Mock Call Logs
+const leadNames = ["Alice Johnson", "Bob Williams", "Charlie Brown", "Diana Miller", "Edward Davis", "Fiona Garcia", "George Rodriguez", "Helen Wilson", "Ian Martinez", "Julia Anderson"];
+const cities = ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"];
+const callResults: CallResult[] = ["answered_success", "answered_dnc_requested", "answered_declined", "busy", "failed_technical", "voicemail_left", "voicemail_full", "no_answer"];
+
+export const MOCK_CALL_LOGS: CallLog[] = Array.from({ length: 50 }, (_, i) => {
+  const bot = MOCK_BOTS[i % MOCK_BOTS.length];
+  const campaign = MOCK_CAMPAIGNS.find(c => c.id === bot.campaignId) || MOCK_CAMPAIGNS[0];
+  const callCenterId = bot.callCenterId;
+  
+  const leadPhoneNumberBase = 55501000000 + i * 10 + Math.floor(Math.random() * 10);
+  const leadPhoneNumber = `${String(leadPhoneNumberBase).slice(0,3)}-${String(leadPhoneNumberBase).slice(3,7)}-${String(leadPhoneNumberBase).slice(7,11)}`;
+
+  let callResult = callResults[i % callResults.length];
+  let markedDNC = false;
+
+  // Simulate DNC check
+  const isOnDNC = MOCK_DNC_LIST.some(dnc => dnc.phoneNumber === leadPhoneNumber);
+  if (isOnDNC && callResult !== "answered_dnc_requested") { // If already on DNC, call shouldn't proceed successfully
+    callResult = "blocked_by_dnc";
+  }
+
+  if (callResult === "answered_dnc_requested") {
+    markedDNC = true;
+    // Ensure this number is on the DNC list if the call resulted in DNC
+    if (!isOnDNC) {
+      MOCK_DNC_LIST.push({
+        phoneNumber: leadPhoneNumber,
+        reason: "User requested during call",
+        addedDate: new Date().toISOString(),
+        sourceCallLogId: `cl-${i}`,
+        addedByBotId: bot.id,
+        callCenterIdSource: callCenterId,
+      });
+    }
+  }
+
+  const callStartTime = new Date(Date.now() - Math.random() * 60 * 86400000); // Within last 60 days
+  let callEndTime: Date | undefined = undefined;
+  let callDurationSeconds: number | undefined = undefined;
+
+  if (callResult !== "blocked_by_dnc" && callResult !== "failed_technical" && callResult !== "busy") {
+    callEndTime = new Date(callStartTime.getTime() + (Math.floor(Math.random() * 300) + 30) * 1000); // 30s to 5min
+    callDurationSeconds = Math.round((callEndTime.getTime() - callStartTime.getTime()) / 1000);
+  }
+
+  return {
+    id: `cl-${i}`,
+    callCenterId,
+    botId: bot.id,
+    botName: bot.name,
+    campaignId: campaign.id,
+    campaignName: campaign.name,
+    leadId: `lead-${i}`,
+    leadName: leadNames[i % leadNames.length],
+    leadPhoneNumber,
+    leadCity: cities[i % cities.length],
+    leadAge: Math.floor(Math.random() * 50) + 20, // Age 20-69
+    callStartTime: callStartTime.toISOString(),
+    callEndTime: callEndTime?.toISOString(),
+    callDurationSeconds,
+    callResult,
+    recordingUrl: callResult !== "blocked_by_dnc" ? `/recordings/mock_rec_${i}.mp3` : undefined,
+    notes: callResult === "answered_dnc_requested" ? "User explicitly asked to be put on DNC." : (Math.random() > 0.8 ? "User seemed interested." : undefined),
+    markedDNC,
+  };
+});
+
+// Ensure DNC list is populated by calls that marked DNC
+MOCK_CALL_LOGS.forEach(log => {
+    if (log.markedDNC && !MOCK_DNC_LIST.some(dnc => dnc.phoneNumber === log.leadPhoneNumber)) {
+        MOCK_DNC_LIST.push({
+            phoneNumber: log.leadPhoneNumber,
+            reason: log.notes || "Marked DNC during call",
+            addedDate: log.callEndTime || new Date().toISOString(),
+            sourceCallLogId: log.id,
+            addedByBotId: log.botId,
+            callCenterIdSource: log.callCenterId
+        });
+    }
 });

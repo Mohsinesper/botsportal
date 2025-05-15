@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase, Settings2 } from 'lucide-react';
+import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase, Settings2, History } from 'lucide-react';
 
 export type NavItem = {
   href: string;
@@ -38,7 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/agents',
     label: 'Agent Configurations',
-    icon: Settings2, // Using Settings2 for a distinct icon
+    icon: Settings2, 
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
   },
   {
@@ -58,6 +58,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Bot Tracking',
     icon: ListChecks,
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
+  },
+  {
+    href: '/call-logs',
+    label: 'Call Logs',
+    icon: History, // Using History icon for logs
+    roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN"],
   },
   {
     href: '/accounting',
