@@ -3,5 +3,7 @@ import {googleAI} from '@genkit-ai/googleai';
 
 export const ai = genkit({
   plugins: [googleAI()],
-  model: 'googleai/gemini-pro', // Changed to a standard model for robust JSON output
+  // Changed from 'googleai/gemini-pro' to a more current and generally available model
+  // to address the "404 Not Found models/gemini-pro:generateContent" error.
+  model: 'googleai/gemini-1.5-flash-latest', 
 });
