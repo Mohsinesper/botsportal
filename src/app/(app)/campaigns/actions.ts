@@ -5,15 +5,15 @@ import {
   generateStructuredCallFlows, 
   type GenerateStructuredCallFlowsInput,
   type GenerateStructuredCallFlowsOutput 
-} from "@/ai/flows/generate-structured-call-flows"; // Updated import
+} from "@/ai/flows/master-script-generator"; // Corrected import path
 
 // Interface for the data coming from the form/client
 interface GenerateScriptsForCampaignClientInput {
   userMasterScript: string;
   campaignName: string;
-  campaignDescription: string; // Added this based on new flow input
+  campaignDescription: string; 
   variantCount: number;
-  // tone?: string; // Optional, if you decide to keep it for AI guidance
+  // tone?: string; 
 }
 
 export async function handleGenerateCampaignScripts(input: GenerateScriptsForCampaignClientInput): Promise<GenerateStructuredCallFlowsOutput | { error: string }> {
@@ -47,3 +47,4 @@ export async function handleGenerateCampaignScripts(input: GenerateScriptsForCam
     return { error: errorMessage };
   }
 }
+
