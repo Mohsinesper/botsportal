@@ -87,8 +87,6 @@ export interface Voice {
   provider?: string;
   settings?: Record<string, any>;
   callCenterId: string;
-  // backgroundNoise?: string; // Removed as per reversal request
-  // backgroundNoiseVolume?: number; // Removed as per reversal request
 }
 
 export interface Agent {
@@ -116,6 +114,8 @@ export interface Bot {
   failedCalls?: number;
   busyCalls?: number;
   totalCalls?: number;
+  activeDutyStartTime?: string; // e.g., "09:00"
+  activeDutyEndTime?: string;   // e.g., "17:00"
 }
 
 export interface Script { 
@@ -151,4 +151,3 @@ export interface Invoice {
   paidDate?: string;  // ISO string
   notes?: string;
 }
-

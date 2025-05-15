@@ -226,6 +226,7 @@ export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
         creationDate: new Date(Date.now() - Math.random() * 30 * 86400000).toISOString(),
         lastActivity: new Date(Date.now() - Math.random() * 7 * 86400000).toISOString(),
         callCenterId: currentCcId, totalCalls, successfulCalls, failedCalls, busyCalls,
+        activeDutyStartTime: (i % 5 === 0) ? "09:00" : undefined, // Add for some bots
+        activeDutyEndTime: (i % 5 === 0) ? "17:00" : undefined,   // Add for some bots
     };
 });
-

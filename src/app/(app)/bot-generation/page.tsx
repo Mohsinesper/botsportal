@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Cpu, Zap, Users, Shuffle } from "lucide-react";
+import { Loader2, Cpu, Zap, Users, Shuffle, Clock } from "lucide-react";
 import type { Campaign, Agent, Bot, Voice, ScriptVariant } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES } from "@/lib/mock-data"; // Import centralized mock data
 
+const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const botGenerationSchema = z.object({
   campaignId: z.string().min(1, "Campaign selection is required"),
@@ -27,6 +28,8 @@ const botGenerationSchema = z.object({
   agentId: z.string().optional(), 
   botCount: z.coerce.number().int().min(1, "Number of bots must be at least 1").optional(),
   botNamePrefix: z.string().optional(),
+  activeDutyStartTime: z.string().regex(timeRegex, "Invalid start time (HH:MM)").optional().or(z.literal("")),
+  activeDutyEndTime: z.string().regex(timeRegex, "Invalid end time (HH:MM)").optional().or(z.literal("")),
 }).refine(data => {
   if (data.generationType === "individual" && !data.agentId) {
     return false;
@@ -43,6 +46,14 @@ const botGenerationSchema = z.object({
 }, {
   message: "Bot count is required for bulk generation",
   path: ["botCount"],
+}).refine(data => {
+  if (data.activeDutyStartTime && data.activeDutyEndTime && data.activeDutyStartTime >= data.activeDutyEndTime) {
+    return false;
+  }
+  return true;
+}, {
+  message: "End time must be after start time",
+  path: ["activeDutyEndTime"],
 });
 
 type BotGenerationFormData = z.infer<typeof botGenerationSchema>;
@@ -63,7 +74,9 @@ export default function BotGenerationPage() {
     defaultValues: {
       generationType: "individual",
       botCount: 10,
-      botNamePrefix: "Bot"
+      botNamePrefix: "Bot",
+      activeDutyStartTime: "",
+      activeDutyEndTime: "",
     }
   });
 
@@ -155,6 +168,8 @@ export default function BotGenerationPage() {
         status: "active",
         creationDate: new Date().toISOString(),
         callCenterId: currentCallCenter.id, 
+        activeDutyStartTime: data.activeDutyStartTime || undefined,
+        activeDutyEndTime: data.activeDutyEndTime || undefined,
       });
     }
     setGeneratedBots(newBots);
@@ -328,6 +343,23 @@ export default function BotGenerationPage() {
                  {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-warning-foreground mt-1 col-span-full bg-warning/20 p-2 rounded-md">Warning: No agent configurations found for the selected campaign. Bots cannot be generated without agents. Please create agents on the <Link href="/agents" className="underline text-primary">Agent Configurations</Link> page.</p>}
               </div>
             )}
+            
+            <div className="border-t pt-4 mt-4">
+                <Label className="flex items-center mb-2"><Clock className="mr-2 h-5 w-5 text-muted-foreground" /> Optional: Active Duty Hours (HH:MM format)</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="activeDutyStartTime">Start Time (e.g., 09:00)</Label>
+                        <Input id="activeDutyStartTime" {...register("activeDutyStartTime")} className="mt-1" placeholder="HH:MM" />
+                        {errors.activeDutyStartTime && <p className="text-sm text-destructive mt-1">{errors.activeDutyStartTime.message}</p>}
+                    </div>
+                    <div>
+                        <Label htmlFor="activeDutyEndTime">End Time (e.g., 17:00)</Label>
+                        <Input id="activeDutyEndTime" {...register("activeDutyEndTime")} className="mt-1" placeholder="HH:MM" />
+                        {errors.activeDutyEndTime && <p className="text-sm text-destructive mt-1">{errors.activeDutyEndTime.message}</p>}
+                    </div>
+                </div>
+            </div>
+
           </CardContent>
           <CardFooter className="border-t pt-6">
             <Button 
@@ -361,7 +393,10 @@ export default function BotGenerationPage() {
                     <p className="font-semibold">{bot.name}</p>
                     <p className="text-xs text-muted-foreground">Campaign: {campaigns.find(c=>c.id === bot.campaignId)?.name}</p>
                     <p className="text-xs text-muted-foreground">Agent Config: {getAgentDetails(bot.agentId)}</p>
-                     <p className="text-xs text-muted-foreground">Call Center: {currentCallCenter.name}</p>
+                    <p className="text-xs text-muted-foreground">Call Center: {currentCallCenter.name}</p>
+                    {bot.activeDutyStartTime && bot.activeDutyEndTime && (
+                        <p className="text-xs text-muted-foreground">Active Hours: {bot.activeDutyStartTime} - {bot.activeDutyEndTime}</p>
+                    )}
                   </div>
                   <Badge variant={bot.status === "active" ? "default" : "secondary"}>{bot.status}</Badge>
                 </li>
