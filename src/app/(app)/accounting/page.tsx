@@ -55,10 +55,13 @@ export default function AccountingPage() {
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
 
   // Filters for Invoice Management
-  const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "all">("all");
+  const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "all" | "overdue">("all");
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
   const [filterCallCenterId, setFilterCallCenterId] = useState<string | "all">("all");
   const [searchTermInvoices, setSearchTermInvoices] = useState("");
+
+  // Search for Rate Management
+  const [rateManagementSearchTerm, setRateManagementSearchTerm] = useState("");
 
 
   const rateForm = useForm<BillingConfigFormData>({
@@ -140,6 +143,13 @@ export default function AccountingPage() {
       return matchesStatus && matchesCallCenter && matchesDate && matchesSearch;
     });
   }, [invoices, filterStatus, filterDateRange, filterCallCenterId, searchTermInvoices, allCallCenters]);
+
+  const filteredCallCentersForRateManagement = useMemo(() => {
+    if (!rateManagementSearchTerm) return allCallCenters;
+    return allCallCenters.filter(cc => 
+      cc.name.toLowerCase().includes(rateManagementSearchTerm.toLowerCase())
+    );
+  }, [allCallCenters, rateManagementSearchTerm]);
 
 
   const summary = {
@@ -256,6 +266,19 @@ export default function AccountingPage() {
               <CardDescription>Set and manage billing rates for each call center.</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-4">
+                <Label htmlFor="rateManagementSearch">Search Call Centers</Label>
+                 <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="rateManagementSearch"
+                        placeholder="Search by call center name..."
+                        value={rateManagementSearchTerm}
+                        onChange={(e) => setRateManagementSearchTerm(e.target.value)}
+                        className="pl-9"
+                    />
+                </div>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -267,10 +290,10 @@ export default function AccountingPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allCallCenters.map((cc) => (
+                  {filteredCallCentersForRateManagement.map((cc) => (
                     <TableRow key={cc.id}>
                       <TableCell>{cc.name}</TableCell>
-                      <TableCell>{cc.billingConfig?.rateType || "Not Set"}</TableCell>
+                      <TableCell>{cc.billingConfig?.rateType?.replace("_", " ") || "Not Set"}</TableCell>
                       <TableCell>{cc.billingConfig?.amount?.toFixed(2) || "N/A"}</TableCell>
                       <TableCell>{cc.billingConfig?.currency || "N/A"}</TableCell>
                       <TableCell className="text-right">
@@ -280,6 +303,13 @@ export default function AccountingPage() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {filteredCallCentersForRateManagement.length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={5} className="text-center h-24">
+                            {allCallCenters.length === 0 ? "No call centers found." : "No call centers match your search."}
+                        </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -314,7 +344,7 @@ export default function AccountingPage() {
                   </div>
                    <div>
                       <Label htmlFor="filterStatus">Status</Label>
-                      <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as InvoiceStatus | "all")}>
+                      <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as InvoiceStatus | "all" | "overdue")}>
                         <SelectTrigger id="filterStatus"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Statuses</SelectItem>
@@ -391,11 +421,13 @@ export default function AccountingPage() {
                       <TableCell>${inv.total.toFixed(2)}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
-                          inv.status === 'paid' ? 'bg-green-100 text-green-700' : 
-                          inv.status === 'pending' && !isOverdue(inv) ? 'bg-yellow-100 text-yellow-700' : 
-                          isOverdue(inv) ? 'bg-red-100 text-red-700' : 
-                          'bg-gray-100 text-gray-700'
-                        }`}>
+                          inv.status === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-300' : 
+                          inv.status === 'pending' && !isOverdue(inv) ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-300' : 
+                          isOverdue(inv) ? 'bg-red-100 text-red-700 dark:bg-red-700/30 dark:text-red-300' : 
+                          inv.status === 'draft' ? 'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-300' :
+                          inv.status === 'cancelled' ? 'bg-slate-100 text-slate-700 dark:bg-slate-700/30 dark:text-slate-300' :
+                          'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-300'
+                        } capitalize`}>
                           {isOverdue(inv) && inv.status !== 'paid' && inv.status !== 'cancelled' ? 'Overdue' : inv.status}
                         </span>
                       </TableCell>
@@ -408,6 +440,13 @@ export default function AccountingPage() {
                       </TableCell>
                     </TableRow>
                   ))}
+                   {filteredInvoices.length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={7} className="text-center h-24">
+                            {invoices.length === 0 ? "No invoices found." : "No invoices match your current filters."}
+                        </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -485,12 +524,13 @@ export default function AccountingPage() {
                 name="callCenterId"
                 control={invoiceForm.control}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
                     <SelectTrigger id="callCenterIdInv"><SelectValue placeholder="Select call center" /></SelectTrigger>
                     <SelectContent>
                       {allCallCenters.filter(cc => cc.billingConfig).map(cc => (
                         <SelectItem key={cc.id} value={cc.id}>{cc.name}</SelectItem>
                       ))}
+                       {allCallCenters.filter(cc => cc.billingConfig).length === 0 && <p className="p-2 text-xs text-muted-foreground">No call centers with billing configs.</p>}
                     </SelectContent>
                   </Select>
                 )}
@@ -553,3 +593,6 @@ export default function AccountingPage() {
     </div>
   );
 }
+
+
+    
