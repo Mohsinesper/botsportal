@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { FilterX, Search, Settings2, FilePenLine, Volume2 } from "lucide-react";
+import { FilterX, Search, Settings2, FilePenLine, Volume2, Copy } from "lucide-react";
 import type { Agent, Campaign, ScriptVariant, Voice } from "@/types";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import { MOCK_AGENTS, MOCK_CAMPAIGNS, MOCK_SCRIPT_VARIANTS, MOCK_VOICES, AVAILABLE_BACKGROUND_NOISES } from "@/lib/mock-data";
@@ -26,15 +26,23 @@ import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 
-interface EditingAgentInfo {
-  agentId: string;
+interface EditingAgentState {
+  id: string;
+  name: string;
   campaignId: string;
-  variantId: string;
-  variantName: string;
+  scriptVariantId: string;
+  scriptVariantName: string;
   scriptContent: string;
+  voiceId: string;
   backgroundNoise?: string;
   backgroundNoiseVolume?: number;
 }
+
+const duplicateAgentSchema = z.object({
+  newAgentName: z.string().min(1, "New agent name is required"),
+});
+type DuplicateAgentFormData = z.infer<typeof duplicateAgentSchema>;
+
 
 export default function AgentConfigurationsPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
@@ -42,27 +50,40 @@ export default function AgentConfigurationsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [voices, setVoices] = useState<Voice[]>([]);
+  const [callCenterVoices, setCallCenterVoices] = useState<Voice[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
 
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [editingAgentInfo, setEditingAgentInfo] = useState<EditingAgentInfo | null>(null);
+  const [editingAgent, setEditingAgent] = useState<EditingAgentState | null>(null);
   
   // States for editing within the dialog
+  const [editableAgentName, setEditableAgentName] = useState("");
+  const [editableVoiceId, setEditableVoiceId] = useState("");
   const [editableScriptContent, setEditableScriptContent] = useState("");
   const [editableBackgroundNoise, setEditableBackgroundNoise] = useState<string | undefined>("none");
   const [editableBackgroundNoiseVolume, setEditableBackgroundNoiseVolume] = useState<number>(0);
+
+  // State for duplication dialog
+  const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
+  const [agentToDuplicate, setAgentToDuplicate] = useState<Agent | null>(null);
+  const duplicateForm = useForm<DuplicateAgentFormData>({
+    resolver: zodResolver(duplicateAgentSchema),
+  });
 
 
   useEffect(() => {
     if (currentCallCenter) {
       setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
       setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
-      setVoices(MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id));
+      const ccVoices = MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id);
+      setVoices(ccVoices); // Set all MOCK_VOICES initially, then filter for CC
+      setCallCenterVoices(ccVoices);
     } else {
       setAgents([]);
       setCampaigns([]);
       setVoices([]);
+      setCallCenterVoices([]);
     }
     setSearchTerm("");
   }, [currentCallCenter]);
@@ -96,15 +117,19 @@ export default function AgentConfigurationsPage() {
   const handleOpenSettingsDialog = (agent: Agent) => {
     const scriptVariant = getScriptVariantDetails(agent.campaignId, agent.scriptVariantId || "");
     if (scriptVariant) {
-      setEditingAgentInfo({
-        agentId: agent.id,
+      setEditingAgent({
+        id: agent.id,
+        name: agent.name,
         campaignId: agent.campaignId,
-        variantId: scriptVariant.id,
-        variantName: scriptVariant.name,
+        scriptVariantId: scriptVariant.id,
+        scriptVariantName: scriptVariant.name,
         scriptContent: scriptVariant.content,
+        voiceId: agent.voiceId,
         backgroundNoise: agent.backgroundNoise || "none",
         backgroundNoiseVolume: agent.backgroundNoiseVolume || 0,
       });
+      setEditableAgentName(agent.name);
+      setEditableVoiceId(agent.voiceId);
       setEditableScriptContent(scriptVariant.content);
       setEditableBackgroundNoise(agent.backgroundNoise || "none");
       setEditableBackgroundNoiseVolume(agent.backgroundNoiseVolume || 0);
@@ -115,23 +140,25 @@ export default function AgentConfigurationsPage() {
   };
 
   const handleSaveSettings = () => {
-    if (!editingAgentInfo) return;
+    if (!editingAgent) return;
 
-    // Update script content
-    const globalCampaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingAgentInfo.campaignId);
+    // Update script content (globally, as script variants are shared)
+    const globalCampaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingAgent.campaignId);
     if (globalCampaignIndex > -1) {
       const campaignToUpdate = MOCK_CAMPAIGNS[globalCampaignIndex];
       if (campaignToUpdate.scriptVariants) {
-        const variantIndex = campaignToUpdate.scriptVariants.findIndex(sv => sv.id === editingAgentInfo.variantId);
+        const variantIndex = campaignToUpdate.scriptVariants.findIndex(sv => sv.id === editingAgent.scriptVariantId);
         if (variantIndex > -1) {
           campaignToUpdate.scriptVariants[variantIndex].content = editableScriptContent;
         }
       }
     }
 
-    // Update agent's background noise settings
-    const agentIndexGlobal = MOCK_AGENTS.findIndex(a => a.id === editingAgentInfo.agentId);
+    // Update agent's specific settings (name, voice, background noise)
+    const agentIndexGlobal = MOCK_AGENTS.findIndex(a => a.id === editingAgent.id);
     if (agentIndexGlobal > -1) {
+        MOCK_AGENTS[agentIndexGlobal].name = editableAgentName;
+        MOCK_AGENTS[agentIndexGlobal].voiceId = editableVoiceId;
         MOCK_AGENTS[agentIndexGlobal].backgroundNoise = editableBackgroundNoise === "none" ? undefined : editableBackgroundNoise;
         MOCK_AGENTS[agentIndexGlobal].backgroundNoiseVolume = editableBackgroundNoise === "none" ? undefined : editableBackgroundNoiseVolume;
     }
@@ -142,9 +169,33 @@ export default function AgentConfigurationsPage() {
       setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
     }
     
-    toast({ title: "Agent Settings Updated", description: `Settings for agent and script "${editingAgentInfo.variantName}" saved.` });
+    toast({ title: "Agent Settings Updated", description: `Settings for agent "${editableAgentName}" saved.` });
     setIsSettingsDialogOpen(false);
-    setEditingAgentInfo(null);
+    setEditingAgent(null);
+  };
+
+  const handleOpenDuplicateDialog = (agent: Agent) => {
+    setAgentToDuplicate(agent);
+    duplicateForm.reset({ newAgentName: `${agent.name} (Copy)`});
+    setIsDuplicateDialogOpen(true);
+  };
+
+  const handleDuplicateAgent = (data: DuplicateAgentFormData) => {
+    if (!agentToDuplicate || !currentCallCenter) return;
+
+    const newAgent: Agent = {
+      ...JSON.parse(JSON.stringify(agentToDuplicate)), // Deep copy
+      id: `agent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: data.newAgentName,
+      callCenterId: currentCallCenter.id, // Ensure it's for the current call center
+    };
+
+    MOCK_AGENTS.push(newAgent);
+    setAgents(prev => [...prev, newAgent]);
+    
+    toast({ title: "Agent Duplicated", description: `Agent "${newAgent.name}" created.` });
+    setIsDuplicateDialogOpen(false);
+    setAgentToDuplicate(null);
   };
 
 
@@ -238,17 +289,25 @@ export default function AgentConfigurationsPage() {
                         <TableCell>{getCampaignName(agent.campaignId)}</TableCell>
                         <TableCell>{scriptVariant?.name || "N/A"}</TableCell>
                         <TableCell>{getVoiceName(agent.voiceId)}</TableCell>
-                        <TableCell>{agent.backgroundNoise ? backgroundNoiseName : "None"}</TableCell>
+                        <TableCell>{agent.backgroundNoise && agent.backgroundNoise !== "none" ? backgroundNoiseName : "None"}</TableCell>
                         <TableCell>{agent.backgroundNoise && agent.backgroundNoise !== "none" && agent.backgroundNoiseVolume !== undefined ? `${agent.backgroundNoiseVolume}%` : "N/A"}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right space-x-1">
                             <Button 
                                 variant="ghost" 
                                 size="icon" 
                                 onClick={() => handleOpenSettingsDialog(agent)}
-                                title="Edit Script & Agent Settings"
+                                title="Edit Agent Settings"
                                 disabled={!scriptVariant}
                             >
                             <FilePenLine className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenDuplicateDialog(agent)}
+                                title="Duplicate Agent"
+                            >
+                                <Copy className="h-4 w-4" />
                             </Button>
                         </TableCell>
                         </TableRow>
@@ -268,21 +327,46 @@ export default function AgentConfigurationsPage() {
       </Card>
 
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
-        <DialogContent key={editingAgentInfo?.variantId || 'agent-settings-dialog'} className="sm:max-w-lg">
+        <DialogContent key={editingAgent?.id || 'agent-settings-dialog'} className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit Settings for: {editingAgentInfo?.variantName}</DialogTitle>
+            <DialogTitle>Edit Agent Settings: {editingAgent?.name}</DialogTitle>
             <DialogDescription>
-              Modify script content and agent-specific background noise settings.
+              Modify agent name, voice, script content, and background noise settings.
+              Script variant: {editingAgent?.scriptVariantName}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4 max-h-[70vh] overflow-y-auto pr-2">
             <div>
-                <Label htmlFor="scriptContentArea">Script Content</Label>
+                <Label htmlFor="agentNameEdit">Agent Name</Label>
+                <Input
+                    id="agentNameEdit"
+                    value={editableAgentName}
+                    onChange={(e) => setEditableAgentName(e.target.value)}
+                    className="mt-1"
+                    placeholder="Enter agent name"
+                />
+            </div>
+             <div>
+                <Label htmlFor="agentVoiceEdit">Voice</Label>
+                <Select value={editableVoiceId} onValueChange={setEditableVoiceId}>
+                    <SelectTrigger id="agentVoiceEdit" className="mt-1">
+                        <SelectValue placeholder="Select a voice" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {callCenterVoices.map(voice => (
+                            <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
+                        ))}
+                         {callCenterVoices.length === 0 && <p className="p-2 text-xs text-muted-foreground">No voices for this call center.</p>}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="border-t pt-4 mt-4">
+                <Label className="font-semibold">Script Content (Variant: {editingAgent?.scriptVariantName})</Label>
                 <Textarea
                 id="scriptContentArea"
                 value={editableScriptContent}
                 onChange={(e) => setEditableScriptContent(e.target.value)}
-                className="min-h-[150px] text-sm"
+                className="min-h-[150px] text-sm mt-2"
                 placeholder="Enter script content here..."
                 />
             </div>
@@ -324,7 +408,33 @@ export default function AgentConfigurationsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isDuplicateDialogOpen} onOpenChange={setIsDuplicateDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Duplicate Agent: {agentToDuplicate?.name}</DialogTitle>
+                <DialogDescription>Enter a new name for the duplicated agent.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={duplicateForm.handleSubmit(handleDuplicateAgent)} className="space-y-4 py-4">
+                <div>
+                    <Label htmlFor="newAgentName">New Agent Name</Label>
+                    <Input 
+                        id="newAgentName" 
+                        {...duplicateForm.register("newAgentName")} 
+                        className="mt-1"
+                        placeholder="Enter unique name for new agent" 
+                    />
+                    {duplicateForm.formState.errors.newAgentName && <p className="text-sm text-destructive mt-1">{duplicateForm.formState.errors.newAgentName.message}</p>}
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setIsDuplicateDialogOpen(false)}>Cancel</Button>
+                    <Button type="submit">Duplicate Agent</Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
 
+    
