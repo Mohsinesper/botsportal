@@ -31,13 +31,12 @@ const campaignSchemaBase = z.object({
   id: z.string().optional(),
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
   status: z.enum(["active", "paused", "archived", "draft"]),
-  // Fields for AI to generate structured JSON from text.
-  // targetAudience, callObjective, tone are now more for metadata or optional AI guidance if not providing full script structure manually.
-  targetAudience: z.string().min(10, "Target audience description is required (for metadata)."),
-  callObjective: z.string().min(5, "Call objective is required (for metadata)."),
   userMasterScript: z.string().min(20, "Master script text must be at least 20 characters."),
   variantCount: z.coerce.number().int().min(0).max(5).default(1), // 0 means only master
-  tone: z.string().optional(), // Optional: for AI guidance if needed
+  // Optional fields, now primarily for metadata or AI guidance if not directly parsing structured script
+  targetAudience: z.string().optional(), 
+  callObjective: z.string().optional(),
+  tone: z.string().optional(),
 });
 
 type CampaignFormData = z.infer<typeof campaignSchemaBase>;
@@ -51,7 +50,6 @@ export default function CampaignsPage() {
   
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false);
   const [campaignToReview, setCampaignToReview] = useState<Campaign | null>(null);
-  // State to hold editable call flows during review
   const [editableCallFlows, setEditableCallFlows] = useState<CallFlow[]>([]);
 
 
@@ -63,10 +61,10 @@ export default function CampaignsPage() {
     defaultValues: {
       name: "",
       status: "draft",
-      targetAudience: "",
-      callObjective: "",
       userMasterScript: "",
       variantCount: 1,
+      targetAudience: "", // Provide default empty string
+      callObjective: "", // Provide default empty string
       tone: "Professional",
     }
   });
@@ -106,9 +104,9 @@ export default function CampaignsPage() {
     const scriptGenerationInput = {
       userMasterScript: data.userMasterScript,
       campaignName: data.name,
-      campaignDescription: `Call flow for ${data.name}: ${data.callObjective}`,
+      // Use optional callObjective for description, provide fallback
+      campaignDescription: `Call flow for ${data.name}: ${data.callObjective || 'General campaign objective.'}`,
       variantCount: data.variantCount,
-      // tone: data.tone, // Pass if your Genkit flow uses it
     };
 
     const scriptResult = await handleGenerateCampaignScripts(scriptGenerationInput);
@@ -124,13 +122,16 @@ export default function CampaignsPage() {
     }
 
     const campaignDataToSave: Partial<Campaign> = {
-      ...data,
+      name: data.name,
+      status: data.status,
+      targetAudience: data.targetAudience || "", // Ensure empty string if optional
+      callObjective: data.callObjective || "",   // Ensure empty string if optional
+      tone: data.tone,
       id: campaignId,
       callCenterId: currentCallCenter.id,
-      userMasterScript: data.userMasterScript, // Save original user master script
+      userMasterScript: data.userMasterScript,
       callFlows: generatedCallFlows,
       createdDate: editingCampaign?.createdDate || new Date().toISOString(),
-      // Clear out old script fields if they exist from previous structure
       masterScript: undefined, 
       scriptVariants: undefined,
     };
@@ -153,12 +154,11 @@ export default function CampaignsPage() {
     
     setIsGeneratingScripts(false);
     setIsCampaignFormOpen(false);
-    reset({name: "", status: "draft", targetAudience: "", callObjective: "", userMasterScript: "", variantCount: 1, tone: "Professional"});
+    reset({name: "", status: "draft", userMasterScript: "", variantCount: 1, targetAudience: "", callObjective: "", tone: "Professional"});
     setEditingCampaign(null);
 
-    // Open review dialog
     setCampaignToReview(savedCampaign);
-    setEditableCallFlows(JSON.parse(JSON.stringify(savedCampaign.callFlows || []))); // Deep copy for editing
+    setEditableCallFlows(JSON.parse(JSON.stringify(savedCampaign.callFlows || [])));
     setIsReviewDialogOpen(true);
   };
 
@@ -167,10 +167,10 @@ export default function CampaignsPage() {
     reset({
       name: campaign.name,
       status: campaign.status,
+      userMasterScript: campaign.userMasterScript || "",
+      variantCount: campaign.callFlows ? Math.max(0, campaign.callFlows.length - 1) : 1, // Default to 1 if no callFlows
       targetAudience: campaign.targetAudience || "",
       callObjective: campaign.callObjective || "",
-      userMasterScript: campaign.userMasterScript || "",
-      variantCount: campaign.callFlows ? Math.max(0, campaign.callFlows.length - 1) : (campaign.scriptVariants?.length || 1),
       tone: campaign.tone || "Professional",
     });
     setIsCampaignFormOpen(true);
@@ -199,10 +199,6 @@ export default function CampaignsPage() {
     const campaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === campaignToReview.id);
     if (campaignIndex > -1) {
       MOCK_CAMPAIGNS[campaignIndex].callFlows = editableCallFlows;
-      // If other parts of the campaignToReview state were modified, update them too
-      // MOCK_CAMPAIGNS[campaignIndex] = { ...MOCK_CAMPAIGNS[campaignIndex], ...campaignToReview, callFlows: editableCallFlows };
-
-
       setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter?.id));
       toast({ title: "Call Flows Updated", description: `Scripts for "${campaignToReview.name}" have been saved.` });
     }
@@ -261,19 +257,18 @@ export default function CampaignsPage() {
         <h2 className="text-3xl font-bold tracking-tight">Campaign Management ({currentCallCenter.name})</h2>
         <Button onClick={() => { 
           setEditingCampaign(null); 
-          reset({name: "", status: "draft", targetAudience: "", callObjective: "", userMasterScript: "", variantCount: 1, tone: "Professional"}); 
+          reset({name: "", status: "draft", userMasterScript: "", variantCount: 1, targetAudience: "", callObjective: "", tone: "Professional"}); 
           setIsCampaignFormOpen(true); 
         }}>
           <PlusCircle className="mr-2 h-4 w-4" /> Create Campaign
         </Button>
       </div>
 
-      {/* Campaign Creation/Editing Dialog */}
       <Dialog open={isCampaignFormOpen} onOpenChange={(isOpen) => {
         setIsCampaignFormOpen(isOpen);
         if (!isOpen) {
           setEditingCampaign(null);
-          reset({name: "", status: "draft", targetAudience: "", callObjective: "", userMasterScript: "", variantCount: 1, tone: "Professional"});
+          reset({name: "", status: "draft", userMasterScript: "", variantCount: 1, targetAudience: "", callObjective: "", tone: "Professional"});
         }
       }}>
         <DialogContent className="sm:max-w-lg">
@@ -323,12 +318,12 @@ export default function CampaignsPage() {
                 </div>
               </div>
                <div>
-                <Label htmlFor="targetAudience-dialog">Target Audience (Metadata)</Label>
+                <Label htmlFor="targetAudience-dialog">Target Audience (Optional Metadata)</Label>
                 <Textarea id="targetAudience-dialog" {...register("targetAudience")} className="mt-1" placeholder="Describe target audience..." />
                 {errors.targetAudience && <p className="text-sm text-destructive mt-1">{errors.targetAudience.message}</p>}
               </div>
               <div>
-                <Label htmlFor="callObjective-dialog">Call Objective (Metadata)</Label>
+                <Label htmlFor="callObjective-dialog">Call Objective (Optional Metadata)</Label>
                 <Textarea id="callObjective-dialog" {...register("callObjective")} className="mt-1" placeholder="Primary goal..." />
                 {errors.callObjective && <p className="text-sm text-destructive mt-1">{errors.callObjective.message}</p>}
               </div>
@@ -362,7 +357,6 @@ export default function CampaignsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Review/Edit Call Flows Dialog */}
       <Dialog open={isReviewDialogOpen} onOpenChange={(isOpen) => {
           if (!isOpen) {
               setCampaignToReview(null);
@@ -448,8 +442,6 @@ export default function CampaignsPage() {
         </DialogContent>
       </Dialog>
 
-
-      {/* Campaigns Table */}
       <Card className="shadow-lg">
          <CardHeader>
           <CardTitle>Filter Campaigns</CardTitle>
@@ -485,39 +477,13 @@ export default function CampaignsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCampaignsData.length > 0 ? filteredCampaignsData.map((campaign) => (
-                <TableRow key={campaign.id}>
-                  <TableCell className="font-medium">{campaign.name}</TableCell>
-                  <TableCell> <Badge variant={statusBadgeVariant(campaign.status)} className="capitalize"> {statusIcon(campaign.status)}{campaign.status} </Badge> </TableCell>
-                  <TableCell className="max-w-xs truncate text-muted-foreground">{campaign.callObjective}</TableCell>
-                  <TableCell>
-                    {(campaign.callFlows && campaign.callFlows.length > 0) ? (
-                       <Button variant="outline" size="sm" onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }}>
-                         <FileJson className="mr-2 h-4 w-4" /> Review ({campaign.callFlows.length})
-                       </Button>
-                    ) : ( <span className="text-xs text-muted-foreground">No call flows</span> )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(campaign.createdDate).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild> <Button variant="ghost" className="h-8 w-8 p-0"> <span className="sr-only">Open menu</span> <MoreHorizontal className="h-4 w-4" /> </Button> </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleOpenEditCampaignForm(campaign)}> <Edit2 className="mr-2 h-4 w-4" /> Edit Details & Master Script </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }} disabled={!campaign.callFlows || campaign.callFlows.length === 0}>
-                           <FileJson className="mr-2 h-4 w-4" /> Review/Edit Call Flows
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {campaign.status !== "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "active")}> <Play className="mr-2 h-4 w-4" /> Activate</DropdownMenuItem>}
-                        {campaign.status === "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "paused")}> <Pause className="mr-2 h-4 w-4" /> Pause</DropdownMenuItem>}
-                        {campaign.status !== "archived" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "archived")}> <Archive className="mr-2 h-4 w-4" /> Archive</DropdownMenuItem>}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10"> <Trash2 className="mr-2 h-4 w-4" /> Delete </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              )) : ( <TableRow> <TableCell colSpan={6} className="text-center h-24"> {campaigns.length === 0 ? "No campaigns created for this call center." : "No campaigns match filters."} </TableCell> </TableRow> )}
+              {filteredCampaignsData.length > 0 ? (
+                filteredCampaignsData.map((campaign) => (
+                  <TableRow key={campaign.id}><TableCell className="font-medium">{campaign.name}</TableCell><TableCell><Badge variant={statusBadgeVariant(campaign.status)} className="capitalize">{statusIcon(campaign.status)}{campaign.status}</Badge></TableCell><TableCell className="max-w-xs truncate text-muted-foreground">{campaign.callObjective}</TableCell><TableCell>{(campaign.callFlows && campaign.callFlows.length > 0) ? (<Button variant="outline" size="sm" onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }}><FileJson className="mr-2 h-4 w-4" /> Review ({campaign.callFlows.length})</Button>) : ( <span className="text-xs text-muted-foreground">No call flows</span> )}</TableCell><TableCell className="text-muted-foreground">{new Date(campaign.createdDate).toLocaleDateString()}</TableCell><TableCell className="text-right"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Open menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuLabel>Actions</DropdownMenuLabel><DropdownMenuItem onClick={() => handleOpenEditCampaignForm(campaign)}><Edit2 className="mr-2 h-4 w-4" /> Edit Details & Master Script</DropdownMenuItem><DropdownMenuItem onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }} disabled={!campaign.callFlows || campaign.callFlows.length === 0}><FileJson className="mr-2 h-4 w-4" /> Review/Edit Call Flows</DropdownMenuItem><DropdownMenuSeparator />{campaign.status !== "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "active")}><Play className="mr-2 h-4 w-4" /> Activate</DropdownMenuItem>}{campaign.status === "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "paused")}><Pause className="mr-2 h-4 w-4" /> Pause</DropdownMenuItem>}{campaign.status !== "archived" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "archived")}><Archive className="mr-2 h-4 w-4" /> Archive</DropdownMenuItem>}<DropdownMenuSeparator /><DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell></TableRow>
+                ))
+              ) : (
+                <TableRow><TableCell colSpan={6} className="text-center h-24">{campaigns.length === 0 ? "No campaigns created for this call center." : "No campaigns match filters."}</TableCell></TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
