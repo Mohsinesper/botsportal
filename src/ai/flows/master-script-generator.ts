@@ -98,7 +98,10 @@ ${input.userMasterScript}
     const structurePrompt = ai.definePrompt({
         name: `structureScriptPrompt_${i}`, // Unique name for each prompt instance if needed, or just rely on dynamic generation
         input: { schema: z.object({ scriptText: z.string() }) },
-        output: { schema: AiGeneratedStepsSchema }, // Expecting the 'steps' object
+        output: { 
+          schema: AiGeneratedStepsSchema,
+          format: 'json' // Explicitly request JSON format
+        },
         prompt: `You are an expert in call center script design. Convert the following call script text into a structured JSON object representing the steps of a call flow.
 Identify logical steps within the provided script. Assign them meaningful keys (e.g., 'greeting', 'qualification_question', 'positive_outcome', 'negative_outcome', 'voicemail', 'exit').
 For each step, provide:
@@ -150,8 +153,8 @@ Ensure there is a clear 'default_exit' step defined.
         }
       };
        allCallFlows.push({
-        name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i}`,
-        description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i})`),
+        name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i+1}`, // Variant numbering starts from 1
+        description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i+1})`),
         default_exit: "final_exit", // Fallback
         steps: fallbackSteps,
       });
@@ -164,19 +167,32 @@ Ensure there is a clear 'default_exit' step defined.
         defaultExitKey = "exit"; // Fallback if 'graceful_exit' is not found but 'exit' is.
     } else if (!structuredSteps[defaultExitKey] && !Object.keys(structuredSteps).includes("exit")) {
         // If neither common exit key is found, create a basic one.
-        defaultExitKey = "standard_exit_placeholder";
-        structuredSteps[defaultExitKey] = {
-            description: "Standard Call Exit",
-            audio_file: "standard_exit_placeholder.wav",
-            wait_for_response: false,
-            text: "Thank you for your time. Goodbye."
-        };
+        // Also, ensure 'final_exit' (or a similar ultimate exit) is present if others point to it.
+        if (!structuredSteps["final_exit"]) {
+             structuredSteps["final_exit"] = {
+                description: "Standard Call Exit - Final",
+                audio_file: "final_exit.wav",
+                wait_for_response: false,
+                text: "Thank you for your time. Goodbye."
+            };
+        }
+        defaultExitKey = Object.keys(structuredSteps).find(key => structuredSteps[key].next === undefined && (!structuredSteps[key].conditions || structuredSteps[key].conditions?.length === 0) && key.toLowerCase().includes("exit")) || "final_exit";
+
+        if(!structuredSteps[defaultExitKey]){ // If still not found, create a generic one
+            defaultExitKey = "standard_exit_placeholder";
+            structuredSteps[defaultExitKey] = {
+                description: "Standard Call Exit",
+                audio_file: "standard_exit_placeholder.wav",
+                wait_for_response: false,
+                text: "Thank you for your time. Goodbye."
+            };
+        }
     }
 
 
     allCallFlows.push({
-      name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i}`,
-      description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i})`),
+      name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i+1}`, // Variant numbering from 1
+      description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i+1})`),
       default_exit: defaultExitKey,
       steps: structuredSteps as Record<string, CallFlowStep>, // Cast needed as AI output schema is generic Record
     });
@@ -188,4 +204,3 @@ Ensure there is a clear 'default_exit' step defined.
 // This flow is now defined within the generateStructuredCallFlows function for simplicity,
 // but could be a separate ai.defineFlow if complex pre/post-processing were needed per script.
 // const structureScriptFlow = ai.defineFlow( ... );
-
