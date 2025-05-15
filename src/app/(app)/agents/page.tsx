@@ -19,6 +19,7 @@ import { useCallCenter } from "@/contexts/CallCenterContext";
 import { MOCK_AGENTS, MOCK_CAMPAIGNS, MOCK_SCRIPT_VARIANTS, MOCK_VOICES } from "@/lib/mock-data";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label"; // Added Label import
 // Note: CRUD for agents is not implemented in this pass. This page is read-only.
 
 export default function AgentConfigurationsPage() {
