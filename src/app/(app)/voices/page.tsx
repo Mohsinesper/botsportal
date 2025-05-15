@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PlusCircle, Edit2, Trash2, Volume2, Search, FilterX } from "lucide-react"; // Added icons
+import { PlusCircle, Edit2, Trash2, Volume2, Search, FilterX } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -17,6 +17,7 @@ import type { Voice } from "@/types";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MOCK_VOICES } from "@/lib/mock-data"; // Import centralized mock data
 
 const voiceSchemaBase = z.object({
   id: z.string().optional(),
@@ -34,14 +35,6 @@ const voiceSchemaBase = z.object({
 });
 
 type VoiceFormData = z.infer<typeof voiceSchemaBase>;
-
-const allMockVoices: Voice[] = [
-  { id: "v1", name: "Ava - Friendly Female (CC1)", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 }, callCenterId: "cc1" },
-  { id: "v2", name: "John - Professional Male (CC1)", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 }, callCenterId: "cc1" },
-  { id: "v3", name: "Mia - Empathetic Female (CC2)", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 }, callCenterId: "cc2" },
-  { id: "v4", name: "Echo - Standard Male (CC2)", provider: "GoogleTTS", settings: { pitch: 0, speed: 1.0 }, callCenterId: "cc2" },
-  { id: "v5", name: "Zoe - Clear Announcer (CC3)", provider: "AzureTTS", settings: { style: "newscast-formal" }, callCenterId: "cc3"},
-];
 
 export default function VoicesPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
@@ -64,7 +57,7 @@ export default function VoicesPage() {
 
   useEffect(() => {
     if (currentCallCenter) {
-      setVoices(allMockVoices.filter(v => v.callCenterId === currentCallCenter.id));
+      setVoices(MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id));
     } else {
       setVoices([]);
     }
@@ -98,12 +91,13 @@ export default function VoicesPage() {
     };
 
     if (editingVoice) {
-      const updatedAllMockVoices = allMockVoices.map(v => v.id === editingVoice.id ? voiceData : v);
-      allMockVoices.splice(0, allMockVoices.length, ...updatedAllMockVoices);
-      setVoices(updatedAllMockVoices.filter(v => v.callCenterId === currentCallCenter.id));
+      const updatedVoices = MOCK_VOICES.map(v => v.id === editingVoice.id ? voiceData : v);
+      MOCK_VOICES.length = 0;
+      MOCK_VOICES.push(...updatedVoices);
+      setVoices(MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id));
       toast({ title: "Voice Updated", description: `Voice "${voiceData.name}" updated.` });
     } else {
-      allMockVoices.push(voiceData);
+      MOCK_VOICES.push(voiceData);
       setVoices(prev => [...prev, voiceData]);
       toast({ title: "Voice Added", description: `Voice "${voiceData.name}" added.` });
     }
@@ -123,8 +117,8 @@ export default function VoicesPage() {
   };
 
   const handleDelete = (id: string) => {
-    const index = allMockVoices.findIndex(v => v.id === id);
-    if (index > -1) allMockVoices.splice(index, 1);
+    const index = MOCK_VOICES.findIndex(v => v.id === id);
+    if (index > -1) MOCK_VOICES.splice(index, 1);
     setVoices(voices.filter(v => v.id !== id));
     toast({ title: "Voice Deleted", variant: "destructive" });
   };
@@ -302,5 +296,3 @@ export default function VoicesPage() {
     </div>
   );
 }
-
-    

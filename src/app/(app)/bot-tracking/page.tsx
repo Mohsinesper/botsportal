@@ -10,80 +10,14 @@ import type { Bot, Campaign, Agent, Voice, ScriptVariant } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, FilterX, PhoneCall } from "lucide-react"; // Added PhoneCall
+import { CalendarIcon, FilterX, PhoneCall } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
-
-
-const allMockCampaigns: Campaign[] = [
-  { id: "c1", name: "Winter Promotion (CC1)", status: "active", scriptVariants: [{id: 'sv1-c1', name: 'Winter V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc1" },
-  { id: "c2", name: "Lead Gen Q1 (CC1)", status: "active", scriptVariants: [{id: 'sv1-c2', name: 'Lead V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc1" },
-  { id: "c3", name: "Customer Survey (CC2)", status: "paused", scriptVariants: [{id: 'sv1-c3', name: 'Survey V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc2" },
-  { id: "c4", name: "Spring Sale (CC2)", status: "active", scriptVariants: [{id: 'sv1-c4', name: 'Spring V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc2" },
-  { id: "c5", name: "EMEA Outreach (CC3)", status: "active", scriptVariants: [{id: 'sv1-c5', name: 'EMEA V1', content: '...'}, {id: 'sv2-c5', name: 'EMEA V2', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc3" },
-];
-
-const allMockAgents: Agent[] = [
-  { id: "a1", name: "Agent Smith (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
-  { id: "a2", name: "Agent Jones (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v2", callCenterId: "cc1" },
-  { id: "a3", name: "Agent Brown (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2" },
-  { id: "a4", name: "Agent White (CC2)", campaignId: "c4", scriptVariantId: "sv1-c4", voiceId: "v4", callCenterId: "cc2" },
-  { id: "a5", name: "Agent Zeta (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v2", callCenterId: "cc1" }, // Example: Diff voice for same campaign/script
-  { id: "a6", name: "Agent Gamma (CC3)", campaignId: "c5", scriptVariantId: "sv1-c5", voiceId: "v5", callCenterId: "cc3"},
-  { id: "a7", name: "Agent Delta (CC3)", campaignId: "c5", scriptVariantId: "sv2-c5", voiceId: "v5", callCenterId: "cc3"},
-];
-const allMockVoices: Voice[] = [
-  { id: "v1", name: "Ava (CC1)", provider: "ElevenLabs", callCenterId: "cc1" },
-  { id: "v2", name: "John (CC1)", provider: "GoogleTTS", callCenterId: "cc1" },
-  { id: "v3", name: "Mia (CC2)", provider: "ElevenLabs", callCenterId: "cc2" },
-  { id: "v4", name: "Liam (CC2)", provider: "GoogleTTS", callCenterId: "cc2" },
-  { id: "v5", name: "Zoe (CC3)", provider: "AzureTTS", callCenterId: "cc3"},
-];
-
-const allMockBots: Bot[] = Array.from({ length: 75 }, (_, i) => {
-    const callCenterIds = ["cc1", "cc2", "cc3"];
-    const currentCcId = callCenterIds[i % callCenterIds.length];
-    
-    let campaignId = '';
-    let agentId = '';
-    const ccAgents = allMockAgents.filter(ag => ag.callCenterId === currentCcId);
-    if (ccAgents.length > 0) {
-      const randomAgent = ccAgents[i % ccAgents.length];
-      agentId = randomAgent.id;
-      campaignId = randomAgent.campaignId;
-    } else {
-      // Fallback if no agents for a CC (should not happen with current data structure)
-      const ccCampaigns = allMockCampaigns.filter(camp => camp.callCenterId === currentCcId);
-      campaignId = ccCampaigns.length > 0 ? ccCampaigns[i % ccCampaigns.length].id : `c-fallback-${currentCcId}`;
-      agentId = `a-fallback-${currentCcId}`;
-    }
-
-
-    const totalCalls = Math.floor(Math.random() * 451) + 50; // 50-500 calls
-    const successfulCalls = Math.floor(totalCalls * (Math.random() * 0.6 + 0.2)); // 20-80% success
-    const remainingAfterSuccess = totalCalls - successfulCalls;
-    const failedCalls = Math.floor(remainingAfterSuccess * (Math.random() * 0.5 + 0.1)); // 10-60% of remaining are failed
-    const busyCalls = remainingAfterSuccess - failedCalls;
-
-    return {
-        id: `bot-${i}`,
-        name: `Bot ${String(i+1).padStart(3, '0')} (${currentCcId.toUpperCase()})`,
-        campaignId,
-        agentId,
-        status: (["active", "inactive", "error"] as Bot["status"][])[i % 3],
-        creationDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        lastActivity: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        callCenterId: currentCcId,
-        totalCalls,
-        successfulCalls,
-        failedCalls,
-        busyCalls,
-    };
-});
+import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES, MOCK_BOTS } from "@/lib/mock-data"; // Import centralized mock data
 
 
 export default function BotTrackingPage() {
@@ -102,10 +36,10 @@ export default function BotTrackingPage() {
 
   useEffect(() => {
     if (currentCallCenter) {
-      setBots(allMockBots.filter(b => b.callCenterId === currentCallCenter.id));
-      setCampaigns(allMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
-      setAgents(allMockAgents.filter(a => a.callCenterId === currentCallCenter.id));
-      setVoices(allMockVoices.filter(v => v.callCenterId === currentCallCenter.id));
+      setBots(MOCK_BOTS.filter(b => b.callCenterId === currentCallCenter.id));
+      setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
+      setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
+      setVoices(MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id));
     } else {
       setBots([]);
       setCampaigns([]);
@@ -352,5 +286,3 @@ export default function BotTrackingPage() {
     </div>
   );
 }
-
-    

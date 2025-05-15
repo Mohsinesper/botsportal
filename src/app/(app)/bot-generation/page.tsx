@@ -18,79 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
-
-// Global Mock data (replace with actual data fetching for a real app)
-const allMockCampaigns: Campaign[] = [
-  { 
-    id: "c1", 
-    name: "Summer Sale Campaign (CC1)", 
-    status: "active", 
-    targetAudience: "All subscribers", 
-    callObjective: "Promote summer sale", 
-    createdDate: "2023-01-01",
-    callCenterId: "cc1",
-    masterScript: "Master script for summer sale...",
-    scriptVariants: [
-      { id: "sv1-c1", name: "Summer Sale Variant 1", content: "Hello! Check out our summer sale..." },
-      { id: "sv2-c1", name: "Summer Sale Variant 2 (Urgent)", content: "Don't miss out! Summer sale ends soon..." },
-    ]
-  },
-  { 
-    id: "c2", 
-    name: "New Product Feedback (CC1)", 
-    status: "active", 
-    targetAudience: "Recent buyers", 
-    callObjective: "Gather product feedback", 
-    createdDate: "2023-02-01",
-    callCenterId: "cc1",
-    masterScript: "Master script for product feedback...",
-    scriptVariants: [
-      { id: "sv1-c2", name: "Feedback Variant Polite", content: "We'd love your feedback on our new product." },
-    ]
-  },
-  { 
-    id: "c3", 
-    name: "Winter Promo (CC2)", 
-    status: "active", 
-    targetAudience: "Previous winter buyers", 
-    callObjective: "Promote winter specials", 
-    createdDate: "2023-03-01",
-    callCenterId: "cc2",
-    masterScript: "Master script for winter promo...",
-    scriptVariants: [
-      { id: "sv1-c3", name: "Winter Variant Early Bird", content: "Early bird specials for winter!" },
-    ]
-  },
-   { 
-    id: "c4", 
-    name: "Support Follow-up (CC3)", 
-    status: "active", 
-    targetAudience: "Customers with recent support tickets", 
-    callObjective: "Ensure issue resolution and satisfaction", 
-    createdDate: "2023-04-01",
-    callCenterId: "cc3",
-    masterScript: "Master script for support follow-up...",
-    scriptVariants: [
-      { id: "sv1-c4", name: "Support Check-in", content: "Hello, this is a follow-up on your recent support request..." },
-    ]
-  },
-];
-
-const allMockVoices: Voice[] = [
-  { id: "v1", name: "Ava - Friendly Female", provider: "ElevenLabs", callCenterId: "cc1" },
-  { id: "v2", name: "John - Professional Male", provider: "GoogleTTS", callCenterId: "cc1" },
-  { id: "v3", name: "Mia - Empathetic Female", provider: "ElevenLabs", callCenterId: "cc2" },
-  { id: "v4", name: "Liam - Clear Male", provider: "GoogleTTS", callCenterId: "cc2" },
-  { id: "v5", name: "Zoe - Upbeat Female", provider: "AzureTTS", callCenterId: "cc3"},
-];
-
-const allMockAgents: Agent[] = [
-  { id: "agent1", name: "Summer Sale V1 - Ava (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
-  { id: "agent2", name: "Summer Sale V2 - John (CC1)", campaignId: "c1", scriptVariantId: "sv2-c1", voiceId: "v2", callCenterId: "cc1" },
-  { id: "agent3", name: "Feedback Polite - Ava (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v1", callCenterId: "cc1" },
-  { id: "agent4", name: "Winter Early - Mia (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2" },
-  { id: "agent5", name: "Support Check - Zoe (CC3)", campaignId: "c4", scriptVariantId: "sv1-c4", voiceId: "v5", callCenterId: "cc3"},
-];
+import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES } from "@/lib/mock-data"; // Import centralized mock data
 
 
 const botGenerationSchema = z.object({
@@ -130,23 +58,6 @@ export default function BotGenerationPage() {
 
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | undefined>();
 
-  useEffect(() => {
-    if (currentCallCenter) {
-      setCampaigns(allMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
-      setAgents(allMockAgents.filter(a => a.callCenterId === currentCallCenter.id));
-      setVoices(allMockVoices.filter(v => v.callCenterId === currentCallCenter.id));
-    } else {
-      setCampaigns([]);
-      setAgents([]);
-      setVoices([]);
-    }
-    // Reset campaign-dependent fields when call center changes
-    setValue("campaignId", undefined);
-    setValue("agentId", undefined);
-    setSelectedCampaignId(undefined);
-
-  }, [currentCallCenter]);
-
   const { control, handleSubmit, register, watch, formState: { errors }, setValue } = useForm<BotGenerationFormData>({
     resolver: zodResolver(botGenerationSchema),
     defaultValues: {
@@ -155,6 +66,23 @@ export default function BotGenerationPage() {
       botNamePrefix: "Bot"
     }
   });
+
+
+  useEffect(() => {
+    if (currentCallCenter) {
+      setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
+      setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
+      setVoices(MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id));
+    } else {
+      setCampaigns([]);
+      setAgents([]);
+      setVoices([]);
+    }
+    setValue("campaignId", undefined);
+    setValue("agentId", undefined);
+    setSelectedCampaignId(undefined);
+
+  }, [currentCallCenter, setValue]);
 
   const generationType = watch("generationType");
   const watchedCampaignId = watch("campaignId");
@@ -173,7 +101,7 @@ export default function BotGenerationPage() {
     setIsLoading(true);
     setGeneratedBots([]);
 
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1500)); 
 
     if (!currentCallCenter) {
       toast({ title: "Error", description: "No call center selected.", variant: "destructive"});
@@ -229,23 +157,20 @@ export default function BotGenerationPage() {
         callCenterId: currentCallCenter.id, 
       });
     }
-    // In a real app, these new bots would be saved to a backend.
-    // For mock purposes, we can add them to a global list if we want them to persist across navigations,
-    // but for this page, just setting local state is fine to show the result.
     setGeneratedBots(newBots);
     if (newBots.length > 0) {
       toast({ title: "Bots Generated Successfully!", description: `${newBots.length} bot(s) have been created.` });
-    } else if(count > 0) { // If tried to generate but none were created
+    } else if(count > 0) { 
       toast({ title: "Bot Generation Issue", description: "No bots were generated. Please check configuration and ensure agents are available for the campaign.", variant: "default"});
     }
     setIsLoading(false);
   };
 
   const getAgentDetails = (agentId: string) => {
-    const agent = agents.find(a => a.id === agentId); // agents state is already filtered
+    const agent = agents.find(a => a.id === agentId); 
     if (!agent) return "Unknown Agent";
-    const voice = voices.find(v => v.id === agent.voiceId); // voices state is already filtered
-    const campaign = campaigns.find(c => c.id === agent.campaignId); // campaigns state is already filtered
+    const voice = voices.find(v => v.id === agent.voiceId); 
+    const campaign = campaigns.find(c => c.id === agent.campaignId); 
     const scriptVariant = campaign?.scriptVariants?.find(sv => sv.id === agent.scriptVariantId);
     return `${agent.name} (Script: ${scriptVariant?.name || 'N/A'}, Voice: ${voice?.name || 'N/A'})`;
   };
@@ -307,7 +232,7 @@ export default function BotGenerationPage() {
                 render={({ field }) => (
                   <Select 
                     onValueChange={(value) => { field.onChange(value); }} 
-                    value={field.value || ""} // Ensure value is controlled
+                    value={field.value || ""} 
                     disabled={campaigns.length === 0}
                   >
                     <SelectTrigger className="w-full mt-1">
@@ -361,7 +286,7 @@ export default function BotGenerationPage() {
                     render={({ field }) => (
                     <Select 
                         onValueChange={field.onChange} 
-                        value={field.value || ""}  // Ensure value is controlled
+                        value={field.value || ""}  
                         disabled={!watchedCampaignId || availableAgentsForCampaign.length === 0}
                     >
                         <SelectTrigger className="w-full mt-1">
@@ -384,7 +309,7 @@ export default function BotGenerationPage() {
                 />
                 {errors.agentId && <p className="text-sm text-destructive mt-1">{errors.agentId.message}</p>}
                  {!watchedCampaignId && campaigns.length > 0 && <p className="text-xs text-muted-foreground mt-1">Please select a campaign to see available agents.</p>}
-                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-muted-foreground mt-1">No agent configurations found for the selected campaign in this call center. Agents define the script and voice for a bot.</p>}
+                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-muted-foreground mt-1">No agent configurations found for the selected campaign in this call center. Agents define the script and voice for a bot. Please create agents on the <Link href="/agents" className="underline text-primary">Agent Configurations</Link> page.</p>}
               </div>
             )}
 
@@ -400,7 +325,7 @@ export default function BotGenerationPage() {
                     <Input id="botNamePrefix" {...register("botNamePrefix")} className="mt-1" placeholder="e.g., CampaignXBot" disabled={!watchedCampaignId}/>
                 </div>
                  {!watchedCampaignId && campaigns.length > 0 && <p className="text-xs text-muted-foreground mt-1 col-span-full">Please select a campaign first to enable bulk generation.</p>}
-                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-warning-foreground mt-1 col-span-full bg-warning/20 p-2 rounded-md">Warning: No agent configurations found for the selected campaign. Bots cannot be generated without agents.</p>}
+                 {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-warning-foreground mt-1 col-span-full bg-warning/20 p-2 rounded-md">Warning: No agent configurations found for the selected campaign. Bots cannot be generated without agents. Please create agents on the <Link href="/agents" className="underline text-primary">Agent Configurations</Link> page.</p>}
               </div>
             )}
           </CardContent>
@@ -411,7 +336,7 @@ export default function BotGenerationPage() {
                     isLoading || 
                     !watchedCampaignId || 
                     (generationType === 'individual' && !watch("agentId")) ||
-                    (generationType !== 'individual' && availableAgentsForCampaign.length === 0 && campaigns.length > 0) // Disable bulk if campaign selected but no agents
+                    (generationType !== 'individual' && availableAgentsForCampaign.length === 0 && campaigns.length > 0) 
                 } 
                 className="w-full md:w-auto"
             >

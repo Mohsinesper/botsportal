@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase } from 'lucide-react';
+import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase, Settings2 } from 'lucide-react';
 
 export type NavItem = {
   href: string;
@@ -33,6 +33,12 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/voices',
     label: 'Voices',
     icon: Mic2,
+    roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
+  },
+  {
+    href: '/agents',
+    label: 'Agent Configurations',
+    icon: Settings2, // Using Settings2 for a distinct icon
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
   },
   {
@@ -72,9 +78,8 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN"],
   },
   {
-    href: '/settings', // New Settings Page
+    href: '/settings',
     label: 'Settings',
-    icon: Settings, // Using the existing Settings icon
-    // Accessible to all authenticated users by default, can be restricted if needed
+    icon: Settings,
   },
 ];

@@ -23,6 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MOCK_CAMPAIGNS } from "@/lib/mock-data"; // Import centralized mock data
 
 const campaignSchemaBase = z.object({
   id: z.string().optional(),
@@ -35,16 +36,6 @@ const campaignSchemaBase = z.object({
 });
 
 type CampaignFormData = z.infer<typeof campaignSchemaBase>;
-
-const allMockCampaigns: Campaign[] = [
-    { id: "1", name: "Summer Sale Promo CC1", status: "active", targetAudience: "Existing customers aged 25-40 interested in tech.", callObjective: "Promote new summer discounts and drive sales.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, masterScript: "Hello [Customer Name], this is a call about our amazing Summer Sale!", scriptVariants: [{id: "sv1-1", name: "Variant 1", content: "Summer Sale Variant 1 content..."}]},
-    { id: "2", name: "New Product Launch CC1", status: "paused", targetAudience: "New leads from recent marketing campaign.", callObjective: "Introduce new product and generate qualified leads.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2 },
-    { id: "3", name: "Customer Feedback Drive CC2", status: "draft", targetAudience: "Customers who purchased in the last 3 months.", callObjective: "Gather feedback on recent purchases and identify areas for improvement.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2" },
-    { id: "4", name: "Winter Special CC1", status: "archived", targetAudience: "All subscribers in cold regions.", callObjective: "Promote winter heating solutions.", createdDate: new Date(Date.now() - 86400000 * 20).toISOString(), callCenterId: "cc1", masterScript: "Stay warm this winter with our new heaters!", scriptVariants: [] },
-    { id: "5", name: "Spring Cleaning Deals CC2", status: "active", targetAudience: "Homeowners in suburban areas.", callObjective: "Offer special discounts on cleaning services.", createdDate: new Date().toISOString(), callCenterId: "cc2", masterScript: "Get your home sparkling for spring!", scriptVariants: [{id: "sv1-5", name: "Early Bird", content: "Book early for spring cleaning..."}]},
-    { id: "6", name: "Tech Support Outreach CC3", status: "draft", targetAudience: "Users of Product X.", callObjective: "Proactively offer tech support and gather feedback.", createdDate: new Date().toISOString(), callCenterId: "cc3", masterScript: "Hello, we're calling from tech support for Product X."},
-];
-
 
 export default function CampaignsPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
@@ -73,7 +64,7 @@ export default function CampaignsPage() {
   
   useEffect(() => {
     if (currentCallCenter) {
-      setCampaigns(allMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
+      setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
     } else {
       setCampaigns([]); 
     }
@@ -135,9 +126,10 @@ export default function CampaignsPage() {
     };
 
     if (editingCampaign) {
-      const updatedAllMockCampaigns = allMockCampaigns.map(c => c.id === editingCampaign.id ? { ...editingCampaign, ...campaignDataWithCallCenter, masterScript: masterScript ?? editingCampaign.masterScript, scriptVariants: scriptVariants ?? editingCampaign.scriptVariants } : c);
-      allMockCampaigns.splice(0, allMockCampaigns.length, ...updatedAllMockCampaigns);
-      setCampaigns(updatedAllMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
+      const updatedCampaigns = MOCK_CAMPAIGNS.map(c => c.id === editingCampaign.id ? { ...editingCampaign, ...campaignDataWithCallCenter, masterScript: masterScript ?? editingCampaign.masterScript, scriptVariants: scriptVariants ?? editingCampaign.scriptVariants } : c);
+      MOCK_CAMPAIGNS.length = 0; // Clear original array
+      MOCK_CAMPAIGNS.push(...updatedCampaigns); // Push updated items
+      setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
 
       toast({ title: "Campaign Updated", description: `Campaign "${data.name}" has been successfully updated.`});
     } else {
@@ -148,7 +140,7 @@ export default function CampaignsPage() {
         masterScript,
         scriptVariants,
       };
-      allMockCampaigns.push(newCampaign);
+      MOCK_CAMPAIGNS.push(newCampaign);
       setCampaigns(prev => [...prev, newCampaign]);
       toast({ title: "Campaign Created", description: `Campaign "${data.name}" has been successfully created.`});
     }
@@ -163,24 +155,25 @@ export default function CampaignsPage() {
     setEditingCampaign(campaign);
     reset({
       ...campaign,
-      tone: (campaign as any).tone || "Professional", // Ensure tone is part of campaign type or handle default
+      tone: (campaign as any).tone || "Professional", 
       variantCount: campaign.scriptVariants?.length || 3,
     });
     setIsDialogOpen(true);
   };
 
   const handleDelete = (id: string) => {
-    const index = allMockCampaigns.findIndex(c => c.id === id);
-    if (index > -1) allMockCampaigns.splice(index, 1);
+    const index = MOCK_CAMPAIGNS.findIndex(c => c.id === id);
+    if (index > -1) MOCK_CAMPAIGNS.splice(index, 1);
     setCampaigns(campaigns.filter(c => c.id !== id));
     toast({ title: "Campaign Deleted", description: "The campaign has been deleted.", variant: "destructive" });
   };
   
   const handleStatusChange = (id: string, status: Campaign["status"]) => {
-    const updatedAllMockCampaigns = allMockCampaigns.map(c => c.id === id ? { ...c, status } : c);
-    allMockCampaigns.splice(0, allMockCampaigns.length, ...updatedAllMockCampaigns);
+    const updatedCampaigns = MOCK_CAMPAIGNS.map(c => c.id === id ? { ...c, status } : c);
+    MOCK_CAMPAIGNS.length = 0;
+    MOCK_CAMPAIGNS.push(...updatedCampaigns);
     if (currentCallCenter) {
-      setCampaigns(updatedAllMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
+      setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
     }
     toast({ title: "Status Updated", description: `Campaign status changed to ${status}.`});
   };
@@ -278,8 +271,8 @@ export default function CampaignsPage() {
               {" "}Campaign will be associated with '{currentCallCenter.name}'.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[70vh] md:max-h-[80vh] pr-5"> {/* Added ScrollArea with padding for scrollbar */}
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <ScrollArea className="max-h-[70vh] md:max-h-[80vh] pr-5"> 
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4" id="campaignForm">
               <div>
                 <Label htmlFor="name">Campaign Name</Label>
                 <Input id="name" {...register("name")} className="mt-1" />
@@ -353,9 +346,9 @@ export default function CampaignsPage() {
               </Card>
             </form>
           </ScrollArea>
-          <DialogFooter className="pt-4 border-t mt-2"> {/* Ensure footer is outside scroll area */}
+          <DialogFooter className="pt-4 border-t mt-2"> 
             <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isGeneratingScripts}>Cancel</Button>
-            <Button type="submit" form="campaignForm" disabled={isGeneratingScripts} onClick={handleSubmit(onSubmit)}> {/* Associate button with form if needed */}
+            <Button type="submit" form="campaignForm" disabled={isGeneratingScripts}> 
               {isGeneratingScripts && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editingCampaign ? "Save & Re-generate Scripts" : "Create & Generate Scripts"}
             </Button>
@@ -524,5 +517,3 @@ export default function CampaignsPage() {
     </div>
   );
 }
-
-    
