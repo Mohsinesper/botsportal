@@ -1,5 +1,109 @@
 
-import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot } from "@/types";
+import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow } from "@/types"; // Added CallFlow
+
+// Example Call Flow (Master)
+const exampleMasterCallFlow: CallFlow = {
+  name: "Medicare Inquiry Master",
+  description: "Master call flow for Medicare benefits qualification.",
+  default_exit: "graceful_exit_step",
+  steps: {
+    "greeting_step": {
+      description: "Initial greeting to the customer.",
+      audio_file: "greeting.wav",
+      wait_for_response: true,
+      timeout: 10,
+      next: "ask_medicare_parts_step",
+      text: "Hello, this is {Name_Placeholder} from the Medicare department. I'm calling about your Medicare benefits. Do you have a moment to talk?",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+    "ask_medicare_parts_step": {
+      description: "Ask if the customer has Medicare Part A and B.",
+      audio_file: "medicare_question.wav",
+      wait_for_response: true,
+      timeout: 10,
+      conditions: [
+        { type: "contains", keywords: ["yes", "yeah", "correct", "i do"], next: "qualification_confirmed_step" },
+        { type: "contains", keywords: ["no", "don't", "do not"], next: "not_qualified_step" },
+        { type: "default", next: "clarification_needed_step" }
+      ],
+      text: "We have some updated Medicare plans that could help you save money. Do you currently have Medicare Part A and Part B?",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+    "qualification_confirmed_step": {
+      description: "Customer confirms they have Part A and B.",
+      audio_file: "qualify.wav",
+      wait_for_response: false, // Or true if asking if they want to hear more
+      next: "offer_program_step",
+      text: "That's great! Since you have Medicare Part A and Part B, you may qualify for our benefits program.",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+     "offer_program_step": {
+      description: "Offer to tell them about the program.",
+      audio_file: "offer_program.wav",
+      wait_for_response: true,
+      timeout: 10,
+      conditions: [
+        { type: "contains", keywords: ["yes", "okay", "sure", "tell me more"], next: "transfer_to_agent_step" }, // Example next step
+        { type: "default", next: "graceful_exit_step" }
+      ],
+      text: "Would you like to hear about the available plans that could help you save on your healthcare costs?",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+    "not_qualified_step": {
+      description: "Customer does not have Part A and B.",
+      audio_file: "not_qualify.wav",
+      wait_for_response: false,
+      next: "graceful_exit_step",
+      text: "I understand. Since you don't have Medicare Part A and Part B, you don't qualify for our program at this time. If your situation changes, please call us back.",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+    "clarification_needed_step": {
+      description: "Response to Medicare question was unclear.",
+      audio_file: "clarify.wav",
+      wait_for_response: true,
+      timeout: 10,
+      conditions: [
+        { type: "contains", keywords: ["yes", "yeah", "correct", "i do"], next: "qualification_confirmed_step" },
+        { type: "contains", keywords: ["no", "don't", "do not"], next: "not_qualified_step" },
+        { type: "default", next: "graceful_exit_step" }
+      ],
+      text: "I'm sorry, I didn't quite catch that. Do you have Medicare Part A and Part B?",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+     "transfer_to_agent_step": {
+      description: "Transferring to an agent.",
+      audio_file: "transfer.wav",
+      wait_for_response: false,
+      next: "final_exit_step",
+      text: "Great, I'll connect you with a licensed agent now. Please hold.",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+    "graceful_exit_step": {
+      description: "Graceful exit if user is not interested or not qualified.",
+      audio_file: "graceful_exit.wav",
+      wait_for_response: false,
+      next: "final_exit_step",
+      text: "Alright, I understand. Thank you for your time. Have a great day!",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+    "voicemail_message_step": {
+      description: "Message to leave on voicemail.",
+      audio_file: "voicemail.wav",
+      wait_for_response: false,
+      next: "final_exit_step",
+      text: "Hello, this is {Name_Placeholder} from the Medicare department regarding your benefits. Please call us back at 1-800-555-1212. Thank you.",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    },
+    "final_exit_step": {
+      description: "Final mandatory exit point of the call.",
+      audio_file: "exit.wav",
+      wait_for_response: false,
+      text: "Goodbye.", // Minimal text, usually just hangs up.
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    }
+  }
+};
+
 
 export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
   { 
@@ -7,85 +111,36 @@ export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
     name: "Main Call Center HQ", 
     location: "New York",
     status: "active",
-    billingConfig: {
-      rateType: "per_month",
-      amount: 5, // $5 per bot per month
-      currency: "USD"
-    }
+    billingConfig: { rateType: "per_month", amount: 5, currency: "USD" }
   },
   { 
     id: "cc2", 
     name: "West Coast Operations", 
     location: "California",
     status: "active",
-    billingConfig: {
-      rateType: "per_call",
-      amount: 0.02, // $0.02 per call
-      currency: "USD"
-    }
+    billingConfig: { rateType: "per_call", amount: 0.02, currency: "USD" }
   },
   { 
     id: "cc3", 
     name: "EMEA Support Hub", 
     location: "London",
     status: "inactive",
-    billingConfig: {
-      rateType: "per_hour",
-      amount: 0.5, // $0.50 per bot active hour
-      currency: "USD"
-    }
+    billingConfig: { rateType: "per_hour", amount: 0.5, currency: "USD" }
   },
 ];
 
 export const MOCK_USERS: User[] = [
-  {
-    id: "user-super-admin",
-    email: "super@example.com",
-    name: "Super Admin",
-    role: "SUPER_ADMIN",
-  },
-  {
-    id: "user-cc-admin-1",
-    email: "ccadmin1@example.com",
-    name: "CC Admin (HQ)",
-    role: "CALL_CENTER_ADMIN",
-    assignedCallCenterIds: ["cc1"],
-  },
-  {
-    id: "user-cc-admin-2",
-    email: "ccadmin2@example.com",
-    name: "CC Admin (West + EMEA)",
-    role: "CALL_CENTER_ADMIN",
-    assignedCallCenterIds: ["cc2", "cc3"],
-  },
-  {
-    id: "user-design-admin-1",
-    email: "design1@example.com",
-    name: "Design Admin (HQ)",
-    role: "DESIGN_ADMIN",
-    assignedCallCenterIds: ["cc1"],
-  },
-  {
-    id: "user-design-admin-2",
-    email: "design2@example.com",
-    name: "Design Admin (West)",
-    role: "DESIGN_ADMIN",
-    assignedCallCenterIds: ["cc2"],
-  },
+  { id: "user-super-admin", email: "super@example.com", name: "Super Admin", role: "SUPER_ADMIN" },
+  { id: "user-cc-admin-1", email: "ccadmin1@example.com", name: "CC Admin (HQ)", role: "CALL_CENTER_ADMIN", assignedCallCenterIds: ["cc1"] },
+  { id: "user-cc-admin-2", email: "ccadmin2@example.com", name: "CC Admin (West + EMEA)", role: "CALL_CENTER_ADMIN", assignedCallCenterIds: ["cc2", "cc3"] },
+  { id: "user-design-admin-1", email: "design1@example.com", name: "Design Admin (HQ)", role: "DESIGN_ADMIN", assignedCallCenterIds: ["cc1"] },
+  { id: "user-design-admin-2", email: "design2@example.com", name: "Design Admin (West)", role: "DESIGN_ADMIN", assignedCallCenterIds: ["cc2"] },
 ];
 
 const generateMockLineItems = (basePrice: number): InvoiceLineItem[] => {
-  const quantity = Math.floor(Math.random() * 50) + 100; // 100-149 units
+  const quantity = Math.floor(Math.random() * 50) + 100; 
   const unitPrice = basePrice;
-  return [
-    {
-      id: `li-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      description: "Bot Usage Charges (Details approximated for mock)",
-      quantity: quantity,
-      unitPrice: unitPrice,
-      totalPrice: quantity * unitPrice,
-    }
-  ];
+  return [{ id: `li-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, description: "Bot Usage Charges (Mocked)", quantity, unitPrice, totalPrice: quantity * unitPrice }];
 };
 
 const calculateTotals = (items: InvoiceLineItem[], taxRate: number = 0.05) => {
@@ -95,127 +150,59 @@ const calculateTotals = (items: InvoiceLineItem[], taxRate: number = 0.05) => {
   return { subtotal, taxAmount, total };
 };
 
-
 const createInvoice = (id: string, callCenterId: string, invoiceNumber: string, issueDate: Date, dueDate: Date, status: InvoiceStatus, baseLineItemPrice: number, notes?: string): Invoice => {
   const items = generateMockLineItems(baseLineItemPrice);
   const { subtotal, taxAmount, total } = calculateTotals(items);
-  return {
-    id,
-    callCenterId,
-    invoiceNumber,
-    issueDate: issueDate.toISOString(),
-    dueDate: dueDate.toISOString(),
-    items,
-    subtotal,
-    taxRate: 0.05,
-    taxAmount,
-    total,
-    status,
-    paidDate: status === "paid" ? new Date(issueDate.getTime() + Math.random() * (dueDate.getTime() - issueDate.getTime())).toISOString() : undefined,
-    notes,
-  };
+  return { id, callCenterId, invoiceNumber, issueDate: issueDate.toISOString(), dueDate: dueDate.toISOString(), items, subtotal, taxRate: 0.05, taxAmount, total, status, paidDate: status === "paid" ? new Date(issueDate.getTime() + Math.random() * (dueDate.getTime() - issueDate.getTime())).toISOString() : undefined, notes };
 };
 
 export let MOCK_INVOICES: Invoice[] = [
-  createInvoice("inv1", "cc1", "INV-2024-001", new Date("2024-07-01"), new Date("2024-07-31"), "paid", 5, "Payment for July 2024 services."),
-  createInvoice("inv2", "cc1", "INV-2024-002", new Date("2024-08-01"), new Date("2024-08-31"), "pending", 5, "Payment for August 2024 services."),
-  createInvoice("inv3", "cc2", "INV-2024-003", new Date("2024-07-05"), new Date("2024-08-04"), "paid", 0.02, "Usage charges for July."),
+  createInvoice("inv1", "cc1", "INV-2024-001", new Date("2024-07-01"), new Date("2024-07-31"), "paid", 5, "July 2024 services."),
+  createInvoice("inv2", "cc1", "INV-2024-002", new Date("2024-08-01"), new Date("2024-08-31"), "pending", 5, "August 2024 services."),
+  createInvoice("inv3", "cc2", "INV-2024-003", new Date("2024-07-05"), new Date("2024-08-04"), "paid", 0.02, "July usage."),
   createInvoice("inv4", "cc2", "INV-2024-004", new Date("2024-08-05"), new Date("2024-09-04"), "pending", 0.02),
-  createInvoice("inv5", "cc3", "INV-2024-005", new Date("2024-06-15"), new Date("2024-07-15"), "overdue", 0.5, "Urgent: Payment overdue."),
+  createInvoice("inv5", "cc3", "INV-2024-005", new Date("2024-06-15"), new Date("2024-07-15"), "overdue", 0.5, "Urgent: Overdue."),
   createInvoice("inv6", "cc3", "INV-2024-006", new Date("2024-07-15"), new Date("2024-08-15"), "draft", 0.5),
 ];
 
-
-export const MOCK_SCRIPT_VARIANTS: ScriptVariant[] = [
-  { id: "sv1-c1", name: "Summer Sale Variant 1", content: "Hello! Check out our summer sale..." },
-  { id: "sv2-c1", name: "Summer Sale Variant 2 (Urgent)", content: "Don't miss out! Summer sale ends soon..." },
-  { id: "sv1-c2", name: "Feedback Variant Polite", content: "We'd love your feedback on our new product." },
-  { id: "sv1-c3", name: "Winter Variant Early Bird", content: "Early bird specials for winter!" },
-  { id: "sv1-c4", name: "Support Check-in", content: "Hello, this is a follow-up on your recent support request..." },
-  { id: "sv1-c5", name: "EMEA V1", content: "EMEA specific outreach version 1..." },
-  { id: "sv2-c5", name: "EMEA V2", content: "EMEA specific outreach version 2, more direct." },
-  { id: "sv-default-generic", name: "Generic Script", content: "Hello, this is a call from our company." },
-  { id: "sv-leadgen-v1", name: "Lead Gen V1", content: "Hi, are you interested in our new service?" },
-  { id: "sv-survey-v1", name: "Survey V1", content: "We are conducting a short survey." },
-  { id: "sv-spring-v1", name: "Spring V1", content: "Get ready for spring with our special offers." }
-];
-
+export const MOCK_SCRIPT_VARIANTS: ScriptVariant[] = [ /* This might be deprecated or used for temp storage */ ];
 
 export const MOCK_CAMPAIGNS: Campaign[] = [
-    { id: "c1", name: "Summer Sale Promo CC1", status: "active", targetAudience: "Existing customers aged 25-40 interested in tech.", callObjective: "Promote new summer discounts and drive sales.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, masterScript: "Hello [Customer Name], this is a call about our amazing Summer Sale!", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv1-c1", "sv2-c1"].includes(sv.id))},
-    { id: "c2", name: "New Product Launch CC1", status: "paused", targetAudience: "New leads from recent marketing campaign.", callObjective: "Introduce new product and generate qualified leads.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2, masterScript: "Master script for new product launch.", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv1-c2"].includes(sv.id)) },
-    { id: "c3", name: "Customer Feedback Drive CC2", status: "draft", targetAudience: "Customers who purchased in the last 3 months.", callObjective: "Gather feedback on recent purchases and identify areas for improvement.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2", masterScript: "Master script for feedback drive.", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv1-c3"].includes(sv.id)) },
-    { id: "c4", name: "Winter Special CC1", status: "archived", targetAudience: "All subscribers in cold regions.", callObjective: "Promote winter heating solutions.", createdDate: new Date(Date.now() - 86400000 * 20).toISOString(), callCenterId: "cc1", masterScript: "Stay warm this winter with our new heaters!", scriptVariants: [] },
-    { id: "c5", name: "Spring Cleaning Deals CC2", status: "active", targetAudience: "Homeowners in suburban areas.", callObjective: "Offer special discounts on cleaning services.", createdDate: new Date().toISOString(), callCenterId: "cc2", masterScript: "Get your home sparkling for spring!", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv-spring-v1"].includes(sv.id))},
-    { id: "c6", name: "Tech Support Outreach CC3", status: "draft", targetAudience: "Users of Product X.", callObjective: "Proactively offer tech support and gather feedback.", createdDate: new Date().toISOString(), callCenterId: "cc3", masterScript: "Hello, we're calling from tech support for Product X.", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv1-c4"].includes(sv.id))},
-    { id: "c7-emea", name: "EMEA Outreach (CC3)", status: "active", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv1-c5", "sv2-c5"].includes(sv.id)), targetAudience: "EMEA Customers", callObjective: "Expand EMEA presence", createdDate: new Date().toISOString(), callCenterId: "cc3" },
-    { id: "c8-leadgen", name: "Lead Gen Q1 (CC1)", status: "active", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv-leadgen-v1"].includes(sv.id)), targetAudience: "New Prospects", callObjective: "Generate Leads", createdDate: new Date().toISOString(), callCenterId: "cc1" },
-    { id: "c9-survey", name: "Customer Survey (CC2)", status: "paused", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => ["sv-survey-v1"].includes(sv.id)), targetAudience: "Recent Customers", callObjective: "Collect Feedback", createdDate: new Date().toISOString(), callCenterId: "cc2" },
+    { id: "c1", name: "Medicare Outreach CC1", status: "active", targetAudience: "Seniors eligible for Medicare", callObjective: "Qualify for Medicare benefits and schedule follow-up.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, userMasterScript: "Hello, this is [Agent Name] from the Medicare department. I'm calling about your Medicare benefits. Do you have Medicare Part A and Part B?", callFlows: [exampleMasterCallFlow] },
+    { id: "c2", name: "Product Feedback CC1", status: "paused", targetAudience: "Recent purchasers of Product X", callObjective: "Gather feedback on Product X.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2, userMasterScript: "Hi, we're calling to get your feedback on your recent purchase of Product X. Do you have a few minutes?" },
+    { id: "c3", name: "Lead Gen Solar CC2", status: "draft", targetAudience: "Homeowners in sunny states", callObjective: "Generate leads for solar panel installations.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2", userMasterScript: "Hello, are you interested in saving money on your electricity bill with solar panels?" },
 ];
-
 
 export const MOCK_VOICES: Voice[] = [
   { id: "v1", name: "Ava - Friendly Female (CC1)", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 }, callCenterId: "cc1" },
   { id: "v2", name: "John - Professional Male (CC1)", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 }, callCenterId: "cc1" },
   { id: "v3", name: "Mia - Empathetic Female (CC2)", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 }, callCenterId: "cc2" },
-  { id: "v4", name: "Echo - Standard Male (CC2)", provider: "GoogleTTS", settings: { pitch: 0, speed: 1.0 }, callCenterId: "cc2" },
-  { id: "v5", name: "Zoe - Clear Announcer (CC3)", provider: "AzureTTS", settings: { style: "newscast-formal" }, callCenterId: "cc3"},
 ];
 
 export const MOCK_AGENTS: Agent[] = [
-  { id: "agent1", name: "Summer Sale V1 - Ava (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
-  { id: "agent2", name: "Summer Sale V2 - John (CC1)", campaignId: "c1", scriptVariantId: "sv2-c1", voiceId: "v2", callCenterId: "cc1" },
-  { id: "agent3", name: "Feedback Polite - Ava (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v1", callCenterId: "cc1" },
-  { id: "agent4", name: "Winter Early - Mia (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2" },
-  { id: "agent5", name: "Support Check - Zoe (CC3)", campaignId: "c6", scriptVariantId: "sv1-c4", voiceId: "v5", callCenterId: "cc3"}, // Matched campaignId to c6 for CC3
-  { id: "agent6", name: "Agent Smith (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
-  { id: "agent7", name: "Agent Jones (CC1)", campaignId: "c8-leadgen", scriptVariantId: "sv-leadgen-v1", voiceId: "v2", callCenterId: "cc1" },
-  { id: "agent8", name: "Agent Brown (CC2)", campaignId: "c9-survey", scriptVariantId: "sv-survey-v1", voiceId: "v3", callCenterId: "cc2" },
-  { id: "agent9", name: "Agent White (CC2)", campaignId: "c5", scriptVariantId: "sv-spring-v1", voiceId: "v4", callCenterId: "cc2" },
-  { id: "agent10", name: "Agent Zeta (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v2", callCenterId: "cc1" },
-  { id: "agent11", name: "Agent Gamma (CC3)", campaignId: "c7-emea", scriptVariantId: "sv1-c5", voiceId: "v5", callCenterId: "cc3"},
-  { id: "agent12", name: "Agent Delta (CC3)", campaignId: "c7-emea", scriptVariantId: "sv2-c5", voiceId: "v5", callCenterId: "cc3"},
+  { id: "agent1", name: "Medicare Agent Default (CC1)", campaignId: "c1", voiceId: "v1", callCenterId: "cc1" },
+  { id: "agent2", name: "Product Feedback Agent (CC1)", campaignId: "c2", voiceId: "v2", callCenterId: "cc1" },
+  { id: "agent3", name: "Solar Lead Gen Agent (CC2)", campaignId: "c3", voiceId: "v3", callCenterId: "cc2" },
 ];
 
-
-export const MOCK_BOTS: Bot[] = Array.from({ length: 75 }, (_, i) => {
-    const callCenterIds = ["cc1", "cc2", "cc3"];
-    const currentCcId = callCenterIds[i % callCenterIds.length];
-    
+export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
+    const ccIds = ["cc1", "cc2", "cc3"];
+    const currentCcId = ccIds[i % ccIds.length];
     const ccAgents = MOCK_AGENTS.filter(ag => ag.callCenterId === currentCcId);
-    let agentId = `a-fallback-${currentCcId}`;
-    let campaignId = `c-fallback-${currentCcId}`;
+    const agent = ccAgents.length > 0 ? ccAgents[i % ccAgents.length] : MOCK_AGENTS[0]; // Fallback agent
+    const campaign = MOCK_CAMPAIGNS.find(c => c.id === agent.campaignId) || MOCK_CAMPAIGNS[0];
 
-    if (ccAgents.length > 0) {
-      const randomAgent = ccAgents[i % ccAgents.length];
-      agentId = randomAgent.id;
-      campaignId = randomAgent.campaignId;
-    } else {
-      // Fallback if no agents for a CC (should not happen with current data structure if agents are defined for all ccs)
-      const ccCampaigns = MOCK_CAMPAIGNS.filter(camp => camp.callCenterId === currentCcId);
-      if (ccCampaigns.length > 0) {
-        campaignId = ccCampaigns[i % ccCampaigns.length].id;
-      }
-    }
-
-    const totalCalls = Math.floor(Math.random() * 451) + 50; // 50-500 calls
-    const successfulCalls = Math.floor(totalCalls * (Math.random() * 0.6 + 0.2)); // 20-80% success
-    const remainingAfterSuccess = totalCalls - successfulCalls;
-    const failedCalls = Math.floor(remainingAfterSuccess * (Math.random() * 0.5 + 0.1)); // 10-60% of remaining are failed
-    const busyCalls = remainingAfterSuccess - failedCalls;
+    const totalCalls = Math.floor(Math.random() * 200) + 50;
+    const successfulCalls = Math.floor(totalCalls * (Math.random() * 0.5 + 0.2));
+    const failedCalls = Math.floor((totalCalls - successfulCalls) * (Math.random() * 0.4 + 0.1));
+    const busyCalls = totalCalls - successfulCalls - failedCalls;
 
     return {
-        id: `bot-${i}`,
-        name: `Bot ${String(i+1).padStart(3, '0')} (${currentCcId.toUpperCase()})`,
-        campaignId,
-        agentId,
+        id: `bot-${i}`, name: `Bot ${String(i+1).padStart(2,'0')} (${currentCcId})`,
+        campaignId: campaign.id, agentId: agent.id,
         status: (["active", "inactive", "error"] as Bot["status"][])[i % 3],
-        creationDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        lastActivity: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        callCenterId: currentCcId,
-        totalCalls,
-        successfulCalls,
-        failedCalls,
-        busyCalls,
+        creationDate: new Date(Date.now() - Math.random() * 30 * 86400000).toISOString(),
+        lastActivity: new Date(Date.now() - Math.random() * 7 * 86400000).toISOString(),
+        callCenterId: currentCcId, totalCalls, successfulCalls, failedCalls, busyCalls,
     };
 });
