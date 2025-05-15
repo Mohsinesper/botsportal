@@ -15,6 +15,7 @@ import {z} from 'genkit';
 import type { CallFlow, CallFlowStep, CallFlowVoiceSettings } from '@/types';
 
 // Define Zod schemas for the CallFlow structure for AI output validation
+// These are NOT exported directly from a "use server" file.
 const CallFlowVoiceSettingsSchema = z.object({
   stability: z.number(),
   similarity_boost: z.number(),
@@ -41,7 +42,7 @@ const CallFlowStepSchema = z.object({
 const AiGeneratedStepsSchema = z.record(CallFlowStepSchema);
 
 
-export const GenerateStructuredCallFlowsInputSchema = z.object({
+const GenerateStructuredCallFlowsInputSchema = z.object({
   userMasterScript: z.string().describe("The complete master script text provided by the user."),
   campaignName: z.string().describe("Name of the campaign, used for naming call flows."),
   campaignDescription: z.string().describe("Description of the campaign, used in call flow JSON."),
@@ -50,7 +51,7 @@ export const GenerateStructuredCallFlowsInputSchema = z.object({
 });
 export type GenerateStructuredCallFlowsInput = z.infer<typeof GenerateStructuredCallFlowsInputSchema>;
 
-export const GenerateStructuredCallFlowsOutputSchema = z.object({
+const GenerateStructuredCallFlowsOutputSchema = z.object({
   generatedCallFlows: z.array(
     z.object({
       name: z.string(),
@@ -187,3 +188,4 @@ Ensure there is a clear 'default_exit' step defined.
 // This flow is now defined within the generateStructuredCallFlows function for simplicity,
 // but could be a separate ai.defineFlow if complex pre/post-processing were needed per script.
 // const structureScriptFlow = ai.defineFlow( ... );
+
