@@ -86,8 +86,6 @@ export interface Voice {
   provider?: string;
   settings?: Record<string, any>;
   callCenterId: string;
-  backgroundNoise?: string; // e.g., "Cafe Ambience", "None"
-  backgroundNoiseVolume?: number; // e.g., 0-100
 }
 
 export interface Agent {
@@ -97,6 +95,7 @@ export interface Agent {
   voiceId: string;
   callCenterId: string;
   performanceMetric?: number;
+  scriptVariantId?: string; // Added to link agent to a specific script variant if needed
 }
 
 export interface Bot {

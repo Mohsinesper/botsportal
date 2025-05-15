@@ -165,26 +165,33 @@ export let MOCK_INVOICES: Invoice[] = [
   createInvoice("inv6", "cc3", "INV-2024-006", new Date("2024-07-15"), new Date("2024-08-15"), "draft", 0.5),
 ];
 
-export const MOCK_SCRIPT_VARIANTS: ScriptVariant[] = [ /* This might be deprecated or used for temp storage */ ];
+// Updated MOCK_SCRIPT_VARIANTS to include campaignId
+export const MOCK_SCRIPT_VARIANTS: ScriptVariant[] = [
+  { id: "sv1-c1", campaignId: "c1", name: "Medicare Welcome v1", content: "Hello, this is [Agent Name] from Medicare services. We have new plans..." },
+  { id: "sv2-c1", campaignId: "c1", name: "Medicare Welcome v2 (Friendly)", content: "Hi there! It's [Agent Name] from the Medicare team. Got a sec to talk about some great new plans?" },
+  { id: "sv1-c2", campaignId: "c2", name: "Product X Feedback Intro", content: "Hi, we're calling about Product X. Could you share your experience?" },
+  { id: "sv1-c3", campaignId: "c3", name: "Solar Lead Gen Main", content: "Interested in solar? We can help you save money!" },
+];
+
 
 export const MOCK_CAMPAIGNS: Campaign[] = [
-    { id: "c1", name: "Medicare Outreach CC1", status: "active", targetAudience: "Seniors eligible for Medicare", callObjective: "Qualify for Medicare benefits and schedule follow-up.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, userMasterScript: "Hello, this is [Agent Name] from the Medicare department. I'm calling about your Medicare benefits. Do you have Medicare Part A and Part B?", callFlows: [exampleMasterCallFlow] },
-    { id: "c2", name: "Product Feedback CC1", status: "paused", targetAudience: "Recent purchasers of Product X", callObjective: "Gather feedback on Product X.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2, userMasterScript: "Hi, we're calling to get your feedback on your recent purchase of Product X. Do you have a few minutes?" },
-    { id: "c3", name: "Lead Gen Solar CC2", status: "draft", targetAudience: "Homeowners in sunny states", callObjective: "Generate leads for solar panel installations.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2", userMasterScript: "Hello, are you interested in saving money on your electricity bill with solar panels?" },
+    { id: "c1", name: "Medicare Outreach CC1", status: "active", targetAudience: "Seniors eligible for Medicare", callObjective: "Qualify for Medicare benefits and schedule follow-up.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, userMasterScript: "Hello, this is [Agent Name] from the Medicare department. I'm calling about your Medicare benefits. Do you have Medicare Part A and Part B?", callFlows: [exampleMasterCallFlow], scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c1') },
+    { id: "c2", name: "Product Feedback CC1", status: "paused", targetAudience: "Recent purchasers of Product X", callObjective: "Gather feedback on Product X.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2, userMasterScript: "Hi, we're calling to get your feedback on your recent purchase of Product X. Do you have a few minutes?", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c2') },
+    { id: "c3", name: "Lead Gen Solar CC2", status: "draft", targetAudience: "Homeowners in sunny states", callObjective: "Generate leads for solar panel installations.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2", userMasterScript: "Hello, are you interested in saving money on your electricity bill with solar panels?", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c3') },
 ];
 
 export const MOCK_VOICES: Voice[] = [
-  { id: "v1", name: "Ava - Friendly Female (CC1)", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 }, callCenterId: "cc1", backgroundNoise: "Cafe Ambience", backgroundNoiseVolume: 30 },
-  { id: "v2", name: "John - Professional Male (CC1)", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 }, callCenterId: "cc1", backgroundNoise: "None" },
-  { id: "v3", name: "Mia - Empathetic Female (CC2)", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 }, callCenterId: "cc2", backgroundNoise: "Office Hum", backgroundNoiseVolume: 15 },
-  { id: "v4", name: "Noah - Calm Male (CC3)", provider: "CustomAPI", settings: { "voice-model": "calm-pro" }, callCenterId: "cc3", backgroundNoise: "Rainfall", backgroundNoiseVolume: 50 },
+  { id: "v1", name: "Ava - Friendly Female (CC1)", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 }, callCenterId: "cc1" },
+  { id: "v2", name: "John - Professional Male (CC1)", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 }, callCenterId: "cc1" },
+  { id: "v3", name: "Mia - Empathetic Female (CC2)", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 }, callCenterId: "cc2" },
+  { id: "v4", name: "Noah - Calm Male (CC3)", provider: "CustomAPI", settings: { "voice-model": "calm-pro" }, callCenterId: "cc3" },
 ];
 
 export const MOCK_AGENTS: Agent[] = [
-  { id: "agent1", name: "Medicare Agent Default (CC1)", campaignId: "c1", voiceId: "v1", callCenterId: "cc1" },
-  { id: "agent2", name: "Product Feedback Agent (CC1)", campaignId: "c2", voiceId: "v2", callCenterId: "cc1" },
-  { id: "agent3", name: "Solar Lead Gen Agent (CC2)", campaignId: "c3", voiceId: "v3", callCenterId: "cc2" },
-  { id: "agent4", name: "Support Agent EMEA (CC3)", campaignId: "c1", voiceId: "v4", callCenterId: "cc3"}, // Example agent for CC3
+  { id: "agent1", name: "Medicare Agent Default (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
+  { id: "agent2", name: "Product Feedback Agent (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v2", callCenterId: "cc1" },
+  { id: "agent3", name: "Solar Lead Gen Agent (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2" },
+  { id: "agent4", name: "Support Agent EMEA (CC3)", campaignId: "c1", scriptVariantId: "sv2-c1", voiceId: "v4", callCenterId: "cc3"}, // Example agent for CC3
 ];
 
 export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
