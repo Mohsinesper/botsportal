@@ -84,8 +84,14 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN"],
   },
   {
-    href: '/settings',
-    label: 'Settings',
-    icon: Settings,
+    href: 'https://your-grafana-instance.com', // Replace with your actual Grafana URL
+    label: 'Grafana Tool',
+    icon: BarChart3, // Example icon, choose one that fits
+    // Roles: Define if needed, otherwise accessible to all logged-in users
   },
+  // {
+  //   href: '/settings', // Settings link removed from sidebar
+  //   label: 'Settings',
+  //   icon: Settings,
+  // },
 ];
