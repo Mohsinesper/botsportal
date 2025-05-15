@@ -11,7 +11,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const CallDropAnalysisInputSchema = z.object({
+const CallDropAnalysisInputSchema = z.object({
   campaignName: z.string().describe("The name of the campaign being analyzed."),
   stepName: z.string().describe("The key/name of the step in the call flow where drops are occurring."),
   stepText: z.string().describe("The exact script text of the step where calls are dropping."),
@@ -19,7 +19,7 @@ export const CallDropAnalysisInputSchema = z.object({
 });
 export type CallDropAnalysisInput = z.infer<typeof CallDropAnalysisInputSchema>;
 
-export const CallDropAnalysisOutputSchema = z.object({
+const CallDropAnalysisOutputSchema = z.object({
   analysis: z.string().describe("A textual analysis of potential reasons for the call drop and suggestions for improvement."),
 });
 export type CallDropAnalysisOutput = z.infer<typeof CallDropAnalysisOutputSchema>;
@@ -63,3 +63,4 @@ const callDropAnalysisFlow = ai.defineFlow(
     return output;
   }
 );
+
