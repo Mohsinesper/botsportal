@@ -104,6 +104,15 @@ const exampleMasterCallFlow: CallFlow = {
   }
 };
 
+export const AVAILABLE_BACKGROUND_NOISES = [
+  { id: "none", name: "None" },
+  { id: "cafe", name: "Cafe Ambience" },
+  { id: "office", name: "Office Hum" },
+  { id: "street", name: "Street Sounds" },
+  { id: "rain_light", name: "Light Rain" },
+  { id: "call_center", name: "Subtle Call Center Murmur" },
+];
+
 
 export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
   { 
@@ -188,10 +197,10 @@ export const MOCK_VOICES: Voice[] = [
 ];
 
 export const MOCK_AGENTS: Agent[] = [
-  { id: "agent1", name: "Medicare Agent Default (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
-  { id: "agent2", name: "Product Feedback Agent (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v2", callCenterId: "cc1" },
-  { id: "agent3", name: "Solar Lead Gen Agent (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2" },
-  { id: "agent4", name: "Support Agent EMEA (CC3)", campaignId: "c1", scriptVariantId: "sv2-c1", voiceId: "v4", callCenterId: "cc3"}, // Example agent for CC3
+  { id: "agent1", name: "Medicare Agent Default (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1", backgroundNoise: "office", backgroundNoiseVolume: 30 },
+  { id: "agent2", name: "Product Feedback Agent (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v2", callCenterId: "cc1", backgroundNoise: "none", backgroundNoiseVolume: 0 },
+  { id: "agent3", name: "Solar Lead Gen Agent (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2", backgroundNoise: "cafe", backgroundNoiseVolume: 50 },
+  { id: "agent4", name: "Support Agent EMEA (CC3)", campaignId: "c1", scriptVariantId: "sv2-c1", voiceId: "v4", callCenterId: "cc3", backgroundNoise: "rain_light", backgroundNoiseVolume: 65},
 ];
 
 export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
@@ -219,3 +228,4 @@ export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
         callCenterId: currentCcId, totalCalls, successfulCalls, failedCalls, busyCalls,
     };
 });
+

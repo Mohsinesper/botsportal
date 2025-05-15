@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Wand2, Lightbulb, BarChart, Mic, Cpu as BotIcon } from "lucide-react"; // Added Mic and BotIcon
+import { Loader2, Wand2, Lightbulb, BarChart, Mic, Cpu as BotIcon, Volume2 } from "lucide-react"; // Added Mic and BotIcon
 import type { AgentOptimizationInput, AgentOptimizationOutput } from "@/ai/flows/agent-optimization-suggestions";
 import { handleSuggestOptimization } from "./actions";
 import { toast } from "@/hooks/use-toast";
@@ -24,8 +24,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
+import { AVAILABLE_BACKGROUND_NOISES } from "@/lib/mock-data";
 
 
 const performanceDataSchema = z.string().refine(
@@ -34,10 +34,11 @@ const performanceDataSchema = z.string().refine(
     const entries = data.split(',');
     return entries.every(entry => {
       const parts = entry.split(':');
-      return parts.length === 3 && !isNaN(parseFloat(parts[2])) && parts[0].trim() !== "" && parts[1].trim() !== "";
+      // Relaxing to allow for optional background noise in data string later if needed, for now, 3 parts
+      return parts.length >= 3 && !isNaN(parseFloat(parts[parts.length -1])) && parts[0].trim() !== "" && parts[1].trim() !== "";
     });
   },
-  "Each entry must be 'Script:Voice:Metric', e.g., 'WelcomeV1:Ava:0.75'. Comma-separate entries. Script/Voice names cannot be empty."
+  "Each entry must be at least 'Script:Voice:Metric'. Comma-separate entries. Script/Voice names cannot be empty."
 );
 
 const agentOptimizationSchema = z.object({
@@ -63,7 +64,7 @@ function parsePerformanceData(dataString: string): Record<string, Record<string,
   const entries = dataString.split(',');
   entries.forEach(entry => {
     const parts = entry.split(':');
-    if (parts.length === 3) {
+    if (parts.length === 3) { // Simple parsing for now, ignoring potential noise in data string
       const scriptVariantName = parts[0].trim(); 
       const voiceName = parts[1].trim(); 
       const metric = parseFloat(parts[2]);
@@ -160,9 +161,15 @@ export default function AgentOptimizationPage() {
   };
 
   const handleMockCall = (suggestion: AgentOptimizationOutput["suggestions"][0]) => {
+    let description = `Script: ${suggestion.scriptVariant}, Voice: ${suggestion.voice}.`;
+    if (suggestion.backgroundNoise && suggestion.backgroundNoise !== "None" && suggestion.backgroundNoiseVolume !== undefined) {
+        const noiseName = AVAILABLE_BACKGROUND_NOISES.find(n => n.id === suggestion.backgroundNoise || n.name === suggestion.backgroundNoise)?.name || suggestion.backgroundNoise;
+        description += ` Background Noise: ${noiseName} (${suggestion.backgroundNoiseVolume}%).`;
+    }
+    description += " Call is now active.";
     toast({
       title: "Mock Call Initiated (Simulated)",
-      description: `Script: ${suggestion.scriptVariant}, Voice: ${suggestion.voice}. Call is now active.`,
+      description: description,
     });
   };
 
@@ -174,9 +181,16 @@ export default function AgentOptimizationPage() {
 
   const handleAddBots = (data: AddBotFormData) => {
     if (!currentSuggestionForBot) return;
+    let description = `${data.botCount} bot(s) with prefix "${data.botNamePrefix}" using script "${currentSuggestionForBot.scriptVariant}" and voice "${currentSuggestionForBot.voice}"`;
+    if (currentSuggestionForBot.backgroundNoise && currentSuggestionForBot.backgroundNoise !== "None" && currentSuggestionForBot.backgroundNoiseVolume !== undefined) {
+        const noiseName = AVAILABLE_BACKGROUND_NOISES.find(n => n.id === currentSuggestionForBot.backgroundNoise || n.name === currentSuggestionForBot.backgroundNoise)?.name || currentSuggestionForBot.backgroundNoise;
+        description += `, with background noise: ${noiseName} (${currentSuggestionForBot.backgroundNoiseVolume}%)`;
+    }
+    description += " are being created.";
+
     toast({
       title: "Bots Generation Started (Simulated)",
-      description: `${data.botCount} bot(s) with prefix "${data.botNamePrefix}" using script "${currentSuggestionForBot.scriptVariant}" and voice "${currentSuggestionForBot.voice}" are being created.`,
+      description: description,
     });
     setIsAddBotDialogOpen(false);
     setCurrentSuggestionForBot(null);
@@ -230,7 +244,7 @@ export default function AgentOptimizationPage() {
           <CardDescription>
             Input your script variant names, available voice names, and their performance data from the 
             '{currentCallCenter.name}'
-            to receive intelligent suggestions for optimal agent configurations.
+            to receive intelligent suggestions for optimal agent configurations, including background noise.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -255,7 +269,7 @@ export default function AgentOptimizationPage() {
               />
               {errors.performanceData && <p className="text-sm text-destructive mt-1">{errors.performanceData.message}</p>}
                <p className="text-xs text-muted-foreground mt-1">
-                Provide performance data for script-voice combinations within '{currentCallCenter.name}'. Use a consistent metric. Ensure names match those entered above.
+                Provide performance data for script-voice combinations within '{currentCallCenter.name}'. Use a consistent metric. Ensure names match those entered above. The AI may also suggest background noise.
               </p>
             </div>
           </CardContent>
@@ -292,6 +306,11 @@ export default function AgentOptimizationPage() {
                   <CardTitle className="text-lg flex items-center">
                     <Lightbulb className="mr-2 h-5 w-5 text-primary" />
                     Suggestion {index + 1}: <span className="ml-2 font-semibold text-primary">{suggestion.scriptVariant}</span> with <span className="ml-1 font-semibold text-primary">{suggestion.voice}</span>
+                    {suggestion.backgroundNoise && suggestion.backgroundNoise !== "None" && suggestion.backgroundNoiseVolume !== undefined && (
+                        <span className="ml-2 text-sm text-muted-foreground flex items-center">
+                           <Volume2 className="mr-1 h-4 w-4" /> {AVAILABLE_BACKGROUND_NOISES.find(n => n.id === suggestion.backgroundNoise || n.name === suggestion.backgroundNoise)?.name || suggestion.backgroundNoise} ({suggestion.backgroundNoiseVolume}%)
+                        </span>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -332,6 +351,11 @@ export default function AgentOptimizationPage() {
               Configure new bot(s) based on: <br />
               Script: <strong>{currentSuggestionForBot?.scriptVariant}</strong> <br/>
               Voice: <strong>{currentSuggestionForBot?.voice}</strong>
+              {currentSuggestionForBot?.backgroundNoise && currentSuggestionForBot?.backgroundNoise !== "None" && currentSuggestionForBot?.backgroundNoiseVolume !== undefined && (
+                <>
+                <br/> Background Noise: <strong>{AVAILABLE_BACKGROUND_NOISES.find(n => n.id === currentSuggestionForBot.backgroundNoise || n.name === currentSuggestionForBot.backgroundNoise)?.name || currentSuggestionForBot.backgroundNoise} ({currentSuggestionForBot.backgroundNoiseVolume}%)</strong>
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={addBotForm.handleSubmit(handleAddBots)} className="space-y-4 py-4">

@@ -60,6 +60,7 @@ export interface ScriptVariant { // This might be deprecated or used differently
   id: string;
   name: string;
   content: string; // Plain text content
+  campaignId: string; // Added to ensure script variant is linked to a campaign
 }
 
 export interface Campaign {
@@ -86,6 +87,8 @@ export interface Voice {
   provider?: string;
   settings?: Record<string, any>;
   callCenterId: string;
+  // backgroundNoise?: string; // Removed as per reversal request
+  // backgroundNoiseVolume?: number; // Removed as per reversal request
 }
 
 export interface Agent {
@@ -95,7 +98,9 @@ export interface Agent {
   voiceId: string;
   callCenterId: string;
   performanceMetric?: number;
-  scriptVariantId?: string; // Added to link agent to a specific script variant if needed
+  scriptVariantId?: string; 
+  backgroundNoise?: string; // e.g., "None", "Cafe Ambience", "Office Hum"
+  backgroundNoiseVolume?: number; // e.g., 0-100
 }
 
 export interface Bot {
@@ -146,3 +151,4 @@ export interface Invoice {
   paidDate?: string;  // ISO string
   notes?: string;
 }
+

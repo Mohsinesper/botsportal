@@ -15,20 +15,25 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { FilterX, Search, Settings2, FilePenLine } from "lucide-react";
+import { FilterX, Search, Settings2, FilePenLine, Volume2 } from "lucide-react";
 import type { Agent, Campaign, ScriptVariant, Voice } from "@/types";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { MOCK_AGENTS, MOCK_CAMPAIGNS, MOCK_SCRIPT_VARIANTS, MOCK_VOICES } from "@/lib/mock-data";
+import { MOCK_AGENTS, MOCK_CAMPAIGNS, MOCK_SCRIPT_VARIANTS, MOCK_VOICES, AVAILABLE_BACKGROUND_NOISES } from "@/lib/mock-data";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 
-interface EditingScriptInfo {
+interface EditingAgentInfo {
+  agentId: string;
   campaignId: string;
   variantId: string;
   variantName: string;
-  content: string;
+  scriptContent: string;
+  backgroundNoise?: string;
+  backgroundNoiseVolume?: number;
 }
 
 export default function AgentConfigurationsPage() {
@@ -40,14 +45,18 @@ export default function AgentConfigurationsPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [isScriptEditDialogOpen, setIsScriptEditDialogOpen] = useState(false);
-  const [editingScriptInfo, setEditingScriptInfo] = useState<EditingScriptInfo | null>(null);
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [editingAgentInfo, setEditingAgentInfo] = useState<EditingAgentInfo | null>(null);
+  
+  // States for editing within the dialog
   const [editableScriptContent, setEditableScriptContent] = useState("");
+  const [editableBackgroundNoise, setEditableBackgroundNoise] = useState<string | undefined>("none");
+  const [editableBackgroundNoiseVolume, setEditableBackgroundNoiseVolume] = useState<number>(0);
+
 
   useEffect(() => {
     if (currentCallCenter) {
       setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
-      // Fetch campaigns relevant to the current call center for script editing
       setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
       setVoices(MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id));
     } else {
@@ -70,7 +79,7 @@ export default function AgentConfigurationsPage() {
   const filteredAgents = useMemo(() => {
     if (!searchTerm) return agents;
     return agents.filter(agent => {
-        const scriptVariantName = getScriptVariantDetails(agent.campaignId, agent.scriptVariantId)?.name || "N/A";
+        const scriptVariantName = getScriptVariantDetails(agent.campaignId, agent.scriptVariantId || "")?.name || "N/A";
         return (
             agent.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             getCampaignName(agent.campaignId).toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -84,56 +93,58 @@ export default function AgentConfigurationsPage() {
     setSearchTerm("");
   };
 
-  const handleOpenEditScriptDialog = (agent: Agent) => {
-    const scriptVariant = getScriptVariantDetails(agent.campaignId, agent.scriptVariantId);
+  const handleOpenSettingsDialog = (agent: Agent) => {
+    const scriptVariant = getScriptVariantDetails(agent.campaignId, agent.scriptVariantId || "");
     if (scriptVariant) {
-      setEditingScriptInfo({
+      setEditingAgentInfo({
+        agentId: agent.id,
         campaignId: agent.campaignId,
         variantId: scriptVariant.id,
         variantName: scriptVariant.name,
-        content: scriptVariant.content,
+        scriptContent: scriptVariant.content,
+        backgroundNoise: agent.backgroundNoise || "none",
+        backgroundNoiseVolume: agent.backgroundNoiseVolume || 0,
       });
       setEditableScriptContent(scriptVariant.content);
-      setIsScriptEditDialogOpen(true);
+      setEditableBackgroundNoise(agent.backgroundNoise || "none");
+      setEditableBackgroundNoiseVolume(agent.backgroundNoiseVolume || 0);
+      setIsSettingsDialogOpen(true);
     } else {
       toast({ title: "Error", description: "Script variant not found for this agent.", variant: "destructive" });
     }
   };
 
-  const handleSaveScriptChanges = () => {
-    if (!editingScriptInfo) return;
+  const handleSaveSettings = () => {
+    if (!editingAgentInfo) return;
 
-    // Find the campaign in the global MOCK_CAMPAIGNS array
-    const globalCampaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingScriptInfo.campaignId);
+    // Update script content
+    const globalCampaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingAgentInfo.campaignId);
     if (globalCampaignIndex > -1) {
       const campaignToUpdate = MOCK_CAMPAIGNS[globalCampaignIndex];
-      
       if (campaignToUpdate.scriptVariants) {
-        const variantIndex = campaignToUpdate.scriptVariants.findIndex(sv => sv.id === editingScriptInfo.variantId);
-        
+        const variantIndex = campaignToUpdate.scriptVariants.findIndex(sv => sv.id === editingAgentInfo.variantId);
         if (variantIndex > -1) {
-          // Update the content in the global mock data
           campaignToUpdate.scriptVariants[variantIndex].content = editableScriptContent;
-
-          // Refresh local campaigns state to reflect changes if currentCallCenter is set
-          if (currentCallCenter) {
-            setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
-          }
-          
-          toast({ title: "Script Updated", description: `Content for "${editingScriptInfo.variantName}" has been saved.` });
-        } else {
-          toast({ title: "Error", description: "Could not find script variant within the campaign.", variant: "destructive" });
         }
-      } else {
-         toast({ title: "Error", description: "Campaign does not have script variants.", variant: "destructive" });
       }
-    } else {
-      toast({ title: "Error", description: "Campaign not found for this script.", variant: "destructive" });
     }
 
-    setIsScriptEditDialogOpen(false);
-    setEditingScriptInfo(null);
-    // Do not reset editableScriptContent here, it will be set by the next open dialog
+    // Update agent's background noise settings
+    const agentIndexGlobal = MOCK_AGENTS.findIndex(a => a.id === editingAgentInfo.agentId);
+    if (agentIndexGlobal > -1) {
+        MOCK_AGENTS[agentIndexGlobal].backgroundNoise = editableBackgroundNoise === "none" ? undefined : editableBackgroundNoise;
+        MOCK_AGENTS[agentIndexGlobal].backgroundNoiseVolume = editableBackgroundNoise === "none" ? undefined : editableBackgroundNoiseVolume;
+    }
+    
+    // Refresh local states
+    if (currentCallCenter) {
+      setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
+      setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
+    }
+    
+    toast({ title: "Agent Settings Updated", description: `Settings for agent and script "${editingAgentInfo.variantName}" saved.` });
+    setIsSettingsDialogOpen(false);
+    setEditingAgentInfo(null);
   };
 
 
@@ -211,25 +222,30 @@ export default function AgentConfigurationsPage() {
                   <TableHead>Campaign</TableHead>
                   <TableHead>Script Variant</TableHead>
                   <TableHead>Voice</TableHead>
+                  <TableHead>Background Noise</TableHead>
+                  <TableHead>Noise Volume</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredAgents.length > 0 ? (
                   filteredAgents.map((agent) => {
-                    const scriptVariant = getScriptVariantDetails(agent.campaignId, agent.scriptVariantId);
+                    const scriptVariant = getScriptVariantDetails(agent.campaignId, agent.scriptVariantId || "");
+                    const backgroundNoiseName = AVAILABLE_BACKGROUND_NOISES.find(bn => bn.id === agent.backgroundNoise)?.name || "None";
                     return (
                         <TableRow key={agent.id}>
                         <TableCell className="font-medium">{agent.name}</TableCell>
                         <TableCell>{getCampaignName(agent.campaignId)}</TableCell>
                         <TableCell>{scriptVariant?.name || "N/A"}</TableCell>
                         <TableCell>{getVoiceName(agent.voiceId)}</TableCell>
+                        <TableCell>{agent.backgroundNoise ? backgroundNoiseName : "None"}</TableCell>
+                        <TableCell>{agent.backgroundNoise && agent.backgroundNoise !== "none" && agent.backgroundNoiseVolume !== undefined ? `${agent.backgroundNoiseVolume}%` : "N/A"}</TableCell>
                         <TableCell className="text-right">
                             <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                onClick={() => handleOpenEditScriptDialog(agent)}
-                                title="Edit Script Content"
+                                onClick={() => handleOpenSettingsDialog(agent)}
+                                title="Edit Script & Agent Settings"
                                 disabled={!scriptVariant}
                             >
                             <FilePenLine className="h-4 w-4" />
@@ -240,7 +256,7 @@ export default function AgentConfigurationsPage() {
                 })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center h-24">
+                    <TableCell colSpan={7} className="text-center h-24">
                       {agents.length === 0 ? "No agent configurations found for this call center." : "No agents match your current filters."}
                     </TableCell>
                   </TableRow>
@@ -251,27 +267,59 @@ export default function AgentConfigurationsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isScriptEditDialogOpen} onOpenChange={setIsScriptEditDialogOpen}>
-        <DialogContent key={editingScriptInfo?.variantId || 'script-edit-dialog'} className="sm:max-w-lg">
+      <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
+        <DialogContent key={editingAgentInfo?.variantId || 'agent-settings-dialog'} className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit Script: {editingScriptInfo?.variantName}</DialogTitle>
+            <DialogTitle>Edit Settings for: {editingAgentInfo?.variantName}</DialogTitle>
             <DialogDescription>
-              Modify the content for this script variant. Changes will affect all agents using this variant.
+              Modify script content and agent-specific background noise settings.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-2">
-            <Label htmlFor="scriptContentArea">Script Content</Label>
-            <Textarea
-              id="scriptContentArea"
-              value={editableScriptContent}
-              onChange={(e) => setEditableScriptContent(e.target.value)}
-              className="min-h-[200px] text-sm"
-              placeholder="Enter script content here..."
-            />
+          <div className="py-4 space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div>
+                <Label htmlFor="scriptContentArea">Script Content</Label>
+                <Textarea
+                id="scriptContentArea"
+                value={editableScriptContent}
+                onChange={(e) => setEditableScriptContent(e.target.value)}
+                className="min-h-[150px] text-sm"
+                placeholder="Enter script content here..."
+                />
+            </div>
+            <div className="border-t pt-4 mt-4">
+                <Label className="font-semibold">Agent Background Noise</Label>
+                <div className="mt-2 space-y-3">
+                    <div>
+                        <Label htmlFor="agentBackgroundNoise">Noise Type</Label>
+                        <Select value={editableBackgroundNoise || "none"} onValueChange={setEditableBackgroundNoise}>
+                            <SelectTrigger id="agentBackgroundNoise"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                {AVAILABLE_BACKGROUND_NOISES.map(noise => (
+                                    <SelectItem key={noise.id} value={noise.id}>{noise.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {editableBackgroundNoise && editableBackgroundNoise !== "none" && (
+                    <div>
+                        <Label htmlFor="agentBackgroundNoiseVolume">Noise Volume ({editableBackgroundNoiseVolume}%)</Label>
+                        <Slider
+                            id="agentBackgroundNoiseVolume"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={[editableBackgroundNoiseVolume || 0]}
+                            onValueChange={(value) => setEditableBackgroundNoiseVolume(value[0])}
+                            className="mt-1"
+                        />
+                    </div>
+                    )}
+                </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsScriptEditDialogOpen(false)}>Cancel</Button>
-            <Button type="button" onClick={handleSaveScriptChanges}>Save Changes</Button>
+          <DialogFooter className="border-t pt-4">
+            <Button type="button" variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={handleSaveSettings}>Save Settings</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
