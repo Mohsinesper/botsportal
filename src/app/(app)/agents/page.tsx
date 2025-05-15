@@ -103,22 +103,29 @@ export default function AgentConfigurationsPage() {
   const handleSaveScriptChanges = () => {
     if (!editingScriptInfo) return;
 
-    const campaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingScriptInfo.campaignId);
-    if (campaignIndex > -1) {
-      const campaign = MOCK_CAMPAIGNS[campaignIndex];
-      const variantIndex = campaign.scriptVariants?.findIndex(sv => sv.id === editingScriptInfo.variantId);
+    // Find the campaign in the global MOCK_CAMPAIGNS array
+    const globalCampaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingScriptInfo.campaignId);
+    if (globalCampaignIndex > -1) {
+      const campaignToUpdate = MOCK_CAMPAIGNS[globalCampaignIndex];
       
-      if (campaign.scriptVariants && variantIndex !== undefined && variantIndex > -1) {
-        campaign.scriptVariants[variantIndex].content = editableScriptContent;
-
-        // Refresh local campaigns state to reflect changes
-        if (currentCallCenter) {
-          setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
-        }
+      if (campaignToUpdate.scriptVariants) {
+        const variantIndex = campaignToUpdate.scriptVariants.findIndex(sv => sv.id === editingScriptInfo.variantId);
         
-        toast({ title: "Script Updated", description: `Content for "${editingScriptInfo.variantName}" has been saved.` });
+        if (variantIndex > -1) {
+          // Update the content in the global mock data
+          campaignToUpdate.scriptVariants[variantIndex].content = editableScriptContent;
+
+          // Refresh local campaigns state to reflect changes if currentCallCenter is set
+          if (currentCallCenter) {
+            setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
+          }
+          
+          toast({ title: "Script Updated", description: `Content for "${editingScriptInfo.variantName}" has been saved.` });
+        } else {
+          toast({ title: "Error", description: "Could not find script variant within the campaign.", variant: "destructive" });
+        }
       } else {
-        toast({ title: "Error", description: "Could not find script variant within the campaign.", variant: "destructive" });
+         toast({ title: "Error", description: "Campaign does not have script variants.", variant: "destructive" });
       }
     } else {
       toast({ title: "Error", description: "Campaign not found for this script.", variant: "destructive" });
@@ -126,6 +133,7 @@ export default function AgentConfigurationsPage() {
 
     setIsScriptEditDialogOpen(false);
     setEditingScriptInfo(null);
+    // Do not reset editableScriptContent here, it will be set by the next open dialog
   };
 
 
@@ -244,7 +252,7 @@ export default function AgentConfigurationsPage() {
       </Card>
 
       <Dialog open={isScriptEditDialogOpen} onOpenChange={setIsScriptEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent key={editingScriptInfo?.variantId || 'script-edit-dialog'} className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Script: {editingScriptInfo?.variantName}</DialogTitle>
             <DialogDescription>
