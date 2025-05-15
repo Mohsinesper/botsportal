@@ -14,6 +14,7 @@ import { format, parseISO, isValid } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { Label } from "@/components/ui/label"; // Added import
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useCallCenter } from "@/contexts/CallCenterContext";
