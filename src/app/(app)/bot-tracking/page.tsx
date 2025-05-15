@@ -6,25 +6,62 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { Bot, Campaign, Agent, Voice } from "@/types";
+import type { Bot, Campaign, Agent, Voice, ScriptVariant } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, FilterX, TrendingUp, TrendingDown, PhoneMissed, Phone } from "lucide-react";
+import { CalendarIcon, FilterX, PhoneCall } from "lucide-react"; // Added PhoneCall
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/hooks/use-toast";
 
-// Global Mock Data (In a real app, this would come from a backend API)
+
+const allMockCampaigns: Campaign[] = [
+  { id: "c1", name: "Winter Promotion (CC1)", status: "active", scriptVariants: [{id: 'sv1-c1', name: 'Winter V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc1" },
+  { id: "c2", name: "Lead Gen Q1 (CC1)", status: "active", scriptVariants: [{id: 'sv1-c2', name: 'Lead V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc1" },
+  { id: "c3", name: "Customer Survey (CC2)", status: "paused", scriptVariants: [{id: 'sv1-c3', name: 'Survey V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc2" },
+  { id: "c4", name: "Spring Sale (CC2)", status: "active", scriptVariants: [{id: 'sv1-c4', name: 'Spring V1', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc2" },
+  { id: "c5", name: "EMEA Outreach (CC3)", status: "active", scriptVariants: [{id: 'sv1-c5', name: 'EMEA V1', content: '...'}, {id: 'sv2-c5', name: 'EMEA V2', content: '...'}], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc3" },
+];
+
+const allMockAgents: Agent[] = [
+  { id: "a1", name: "Agent Smith (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v1", callCenterId: "cc1" },
+  { id: "a2", name: "Agent Jones (CC1)", campaignId: "c2", scriptVariantId: "sv1-c2", voiceId: "v2", callCenterId: "cc1" },
+  { id: "a3", name: "Agent Brown (CC2)", campaignId: "c3", scriptVariantId: "sv1-c3", voiceId: "v3", callCenterId: "cc2" },
+  { id: "a4", name: "Agent White (CC2)", campaignId: "c4", scriptVariantId: "sv1-c4", voiceId: "v4", callCenterId: "cc2" },
+  { id: "a5", name: "Agent Zeta (CC1)", campaignId: "c1", scriptVariantId: "sv1-c1", voiceId: "v2", callCenterId: "cc1" }, // Example: Diff voice for same campaign/script
+  { id: "a6", name: "Agent Gamma (CC3)", campaignId: "c5", scriptVariantId: "sv1-c5", voiceId: "v5", callCenterId: "cc3"},
+  { id: "a7", name: "Agent Delta (CC3)", campaignId: "c5", scriptVariantId: "sv2-c5", voiceId: "v5", callCenterId: "cc3"},
+];
+const allMockVoices: Voice[] = [
+  { id: "v1", name: "Ava (CC1)", provider: "ElevenLabs", callCenterId: "cc1" },
+  { id: "v2", name: "John (CC1)", provider: "GoogleTTS", callCenterId: "cc1" },
+  { id: "v3", name: "Mia (CC2)", provider: "ElevenLabs", callCenterId: "cc2" },
+  { id: "v4", name: "Liam (CC2)", provider: "GoogleTTS", callCenterId: "cc2" },
+  { id: "v5", name: "Zoe (CC3)", provider: "AzureTTS", callCenterId: "cc3"},
+];
+
 const allMockBots: Bot[] = Array.from({ length: 75 }, (_, i) => {
     const callCenterIds = ["cc1", "cc2", "cc3"];
     const currentCcId = callCenterIds[i % callCenterIds.length];
-    let campaignIdSuffix = '';
-    if (currentCcId === 'cc1') campaignIdSuffix = (i % 2) + 1; // c1, c2
-    else if (currentCcId === 'cc2') campaignIdSuffix = (i % 2) + 3; // c3, c4
-    else campaignIdSuffix = (i % 1) + 5; // c5
+    
+    let campaignId = '';
+    let agentId = '';
+    const ccAgents = allMockAgents.filter(ag => ag.callCenterId === currentCcId);
+    if (ccAgents.length > 0) {
+      const randomAgent = ccAgents[i % ccAgents.length];
+      agentId = randomAgent.id;
+      campaignId = randomAgent.campaignId;
+    } else {
+      // Fallback if no agents for a CC (should not happen with current data structure)
+      const ccCampaigns = allMockCampaigns.filter(camp => camp.callCenterId === currentCcId);
+      campaignId = ccCampaigns.length > 0 ? ccCampaigns[i % ccCampaigns.length].id : `c-fallback-${currentCcId}`;
+      agentId = `a-fallback-${currentCcId}`;
+    }
+
 
     const totalCalls = Math.floor(Math.random() * 451) + 50; // 50-500 calls
     const successfulCalls = Math.floor(totalCalls * (Math.random() * 0.6 + 0.2)); // 20-80% success
@@ -35,8 +72,8 @@ const allMockBots: Bot[] = Array.from({ length: 75 }, (_, i) => {
     return {
         id: `bot-${i}`,
         name: `Bot ${String(i+1).padStart(3, '0')} (${currentCcId.toUpperCase()})`,
-        campaignId: `c${campaignIdSuffix}`,
-        agentId: `a${(i % 7) + 1}`, // Agents a1-a2 (cc1), a3-a4 (cc2), a5 (cc1), a6-a7 (cc3)
+        campaignId,
+        agentId,
         status: (["active", "inactive", "error"] as Bot["status"][])[i % 3],
         creationDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
         lastActivity: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -47,30 +84,6 @@ const allMockBots: Bot[] = Array.from({ length: 75 }, (_, i) => {
         busyCalls,
     };
 });
-
-const allMockCampaigns: Campaign[] = [
-  { id: "c1", name: "Winter Promotion (CC1)", status: "active", scriptVariants: [], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc1" },
-  { id: "c2", name: "Lead Gen Q1 (CC1)", status: "active", scriptVariants: [], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc1" },
-  { id: "c3", name: "Customer Survey (CC2)", status: "paused", scriptVariants: [], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc2" },
-  { id: "c4", name: "Spring Sale (CC2)", status: "active", scriptVariants: [], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc2" },
-  { id: "c5", name: "EMEA Outreach (CC3)", status: "active", scriptVariants: [], targetAudience: "", callObjective: "", createdDate:"", callCenterId: "cc3" },
-];
-const allMockAgents: Agent[] = [
-  { id: "a1", name: "Agent Smith (CC1)", scriptVariantId: "sv1", voiceId: "v1", callCenterId: "cc1" },
-  { id: "a2", name: "Agent Jones (CC1)", scriptVariantId: "sv2", voiceId: "v2", callCenterId: "cc1" },
-  { id: "a3", name: "Agent Brown (CC2)", scriptVariantId: "sv1", voiceId: "v3", callCenterId: "cc2" },
-  { id: "a4", name: "Agent White (CC2)", scriptVariantId: "sv3", voiceId: "v4", callCenterId: "cc2" },
-  { id: "a5", name: "Agent Zeta (CC1)", scriptVariantId: "sv3", voiceId: "v1", callCenterId: "cc1" },
-  { id: "a6", name: "Agent Gamma (CC3)", scriptVariantId: "sv1-c5", voiceId: "v5", callCenterId: "cc3"},
-  { id: "a7", name: "Agent Delta (CC3)", scriptVariantId: "sv2-c5", voiceId: "v5", callCenterId: "cc3"},
-];
-const allMockVoices: Voice[] = [
-  { id: "v1", name: "Ava (CC1)", provider: "ElevenLabs", callCenterId: "cc1" },
-  { id: "v2", name: "John (CC1)", provider: "GoogleTTS", callCenterId: "cc1" },
-  { id: "v3", name: "Mia (CC2)", provider: "ElevenLabs", callCenterId: "cc2" },
-  { id: "v4", name: "Liam (CC2)", provider: "GoogleTTS", callCenterId: "cc2" },
-  { id: "v5", name: "Zoe (CC3)", provider: "AzureTTS", callCenterId: "cc3"},
-];
 
 
 export default function BotTrackingPage() {
@@ -99,7 +112,6 @@ export default function BotTrackingPage() {
       setAgents([]);
       setVoices([]);
     }
-    // Reset filters when call center changes
     resetFilters();
   }, [currentCallCenter]);
 
@@ -121,13 +133,21 @@ export default function BotTrackingPage() {
     });
   }, [bots, searchTerm, selectedCampaign, selectedAgent, selectedStatus, creationDate, campaigns, agents]);
 
-  const getCampaignName = (id: string) => campaigns.find(c => c.id === id)?.name || "Unknown";
+  const getCampaignName = (id: string) => campaigns.find(c => c.id === id)?.name || "Unknown Campaign";
   
-  const getAgentNameWithDetails = (agentId: string) => {
+  const getAgentDetails = (agentId: string): { agentName: string, scriptName: string, voiceName: string } => {
     const agent = agents.find(a => a.id === agentId);
-    if (!agent) return "Unknown Agent";
+    if (!agent) return { agentName: "Unknown Agent", scriptName: "N/A", voiceName: "N/A" };
+    
     const voice = voices.find(v => v.id === agent.voiceId);
-    return `${agent.name} (Voice: ${voice?.name || 'N/A'})`;
+    const campaign = campaigns.find(c => c.id === agent.campaignId);
+    const scriptVariant = campaign?.scriptVariants?.find(sv => sv.id === agent.scriptVariantId);
+    
+    return {
+      agentName: agent.name,
+      scriptName: scriptVariant?.name || "N/A",
+      voiceName: voice?.name || "N/A"
+    };
   };
 
   const statusBadgeVariant = (status: Bot["status"]) => {
@@ -145,6 +165,14 @@ export default function BotTrackingPage() {
     setSelectedAgent(undefined);
     setSelectedStatus(undefined);
     setCreationDate(undefined);
+  };
+
+  const handleMockCall = (bot: Bot) => {
+    const { agentName, scriptName, voiceName } = getAgentDetails(bot.agentId);
+    toast({
+      title: "Mock Call Initiated (Simulated)",
+      description: `Bot: ${bot.name}\nAgent: ${agentName}\nScript: ${scriptName}\nVoice: ${voiceName}`,
+    });
   };
   
   if (isCallCenterLoading) {
@@ -224,7 +252,7 @@ export default function BotTrackingPage() {
               <SelectGroup>
                 <SelectLabel>Agents</SelectLabel>
                  <SelectItem value="all">All Agents</SelectItem>
-                {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                {agents.map(a => <SelectItem key={a.id} value={a.id}>{getAgentDetails(a.id).agentName}</SelectItem>)}
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -285,6 +313,7 @@ export default function BotTrackingPage() {
                   <TableHead className="text-right">Successful</TableHead>
                   <TableHead className="text-right">Failed</TableHead>
                   <TableHead className="text-right">Busy</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -292,7 +321,7 @@ export default function BotTrackingPage() {
                   <TableRow key={bot.id}>
                     <TableCell className="font-medium">{bot.name}</TableCell>
                     <TableCell className="text-muted-foreground">{getCampaignName(bot.campaignId)}</TableCell>
-                    <TableCell className="text-muted-foreground">{getAgentNameWithDetails(bot.agentId)}</TableCell>
+                    <TableCell className="text-muted-foreground">{getAgentDetails(bot.agentId).agentName}</TableCell>
                     <TableCell>
                       <Badge variant={statusBadgeVariant(bot.status)} className="capitalize">{bot.status}</Badge>
                     </TableCell>
@@ -302,10 +331,15 @@ export default function BotTrackingPage() {
                     <TableCell className="text-right text-green-600 dark:text-green-500">{bot.successfulCalls ?? 0}</TableCell>
                     <TableCell className="text-right text-red-600 dark:text-red-500">{bot.failedCalls ?? 0}</TableCell>
                     <TableCell className="text-right text-yellow-600 dark:text-yellow-500">{bot.busyCalls ?? 0}</TableCell>
+                    <TableCell className="text-center">
+                        <Button variant="ghost" size="icon" onClick={() => handleMockCall(bot)} title="Mock Call (Simulated)">
+                            <PhoneCall className="h-4 w-4" />
+                        </Button>
+                    </TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center h-24">
+                    <TableCell colSpan={11} className="text-center h-24">
                       {bots.length === 0 ? "No bots found for this call center." : "No bots match your current filters."}
                     </TableCell>
                   </TableRow>
@@ -319,3 +353,4 @@ export default function BotTrackingPage() {
   );
 }
 
+    

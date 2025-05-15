@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PlusCircle, Edit2, Trash2 } from "lucide-react";
+import { PlusCircle, Edit2, Trash2, Volume2, Search, FilterX } from "lucide-react"; // Added icons
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -31,7 +31,6 @@ const voiceSchemaBase = z.object({
       return false;
     }
   }, { message: "Settings must be valid JSON or empty"}),
-  // callCenterId is handled by context
 });
 
 type VoiceFormData = z.infer<typeof voiceSchemaBase>;
@@ -49,6 +48,10 @@ export default function VoicesPage() {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
+
+  // Filters
+  const [searchTermVoices, setSearchTermVoices] = useState("");
+  const [filterProviderVoices, setFilterProviderVoices] = useState("");
   
   const { register, handleSubmit, reset, formState: { errors } } = useForm<VoiceFormData>({
     resolver: zodResolver(voiceSchemaBase),
@@ -65,7 +68,21 @@ export default function VoicesPage() {
     } else {
       setVoices([]);
     }
+    resetFilters();
   }, [currentCallCenter]);
+
+  const filteredVoicesData = useMemo(() => {
+    return voices.filter(voice => {
+      const matchesSearch = searchTermVoices === "" || voice.name.toLowerCase().includes(searchTermVoices.toLowerCase());
+      const matchesProvider = filterProviderVoices === "" || (voice.provider && voice.provider.toLowerCase().includes(filterProviderVoices.toLowerCase()));
+      return matchesSearch && matchesProvider;
+    });
+  }, [voices, searchTermVoices, filterProviderVoices]);
+
+  const resetFilters = () => {
+    setSearchTermVoices("");
+    setFilterProviderVoices("");
+  };
 
   const onSubmit = (data: VoiceFormData) => {
     if (!currentCallCenter) {
@@ -110,6 +127,10 @@ export default function VoicesPage() {
     if (index > -1) allMockVoices.splice(index, 1);
     setVoices(voices.filter(v => v.id !== id));
     toast({ title: "Voice Deleted", variant: "destructive" });
+  };
+  
+  const handlePlayVoice = (voiceName: string) => {
+    toast({ title: "Mock Playback", description: `Playing voice: ${voiceName} (mocked).`});
   };
 
   if (isCallCenterLoading) {
@@ -202,6 +223,41 @@ export default function VoicesPage() {
       </Dialog>
 
       <Card className="shadow-lg">
+        <CardHeader>
+            <CardTitle>Filter Voices</CardTitle>
+            <CardDescription>Refine the list of voices for {currentCallCenter.name}.</CardDescription>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <Label htmlFor="voiceNameSearch">Search by Name</Label>
+                     <div className="relative mt-1">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            id="voiceNameSearch"
+                            placeholder="Enter voice name..."
+                            value={searchTermVoices}
+                            onChange={(e) => setSearchTermVoices(e.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
+                </div>
+                <div>
+                    <Label htmlFor="voiceProviderSearch">Search by Provider</Label>
+                    <div className="relative mt-1">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            id="voiceProviderSearch"
+                            placeholder="Enter provider name..."
+                            value={filterProviderVoices}
+                            onChange={(e) => setFilterProviderVoices(e.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
+                </div>
+                <Button onClick={resetFilters} variant="outline" size="sm">
+                    <FilterX className="mr-2 h-4 w-4" /> Reset Filters
+                </Button>
+            </div>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -213,7 +269,7 @@ export default function VoicesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {voices.length > 0 ? voices.map((voice) => (
+              {filteredVoicesData.length > 0 ? filteredVoicesData.map((voice) => (
                 <TableRow key={voice.id}>
                   <TableCell className="font-medium">{voice.name}</TableCell>
                   <TableCell>{voice.provider || "N/A"}</TableCell>
@@ -221,17 +277,22 @@ export default function VoicesPage() {
                     {voice.settings ? JSON.stringify(voice.settings) : "N/A"}
                   </TableCell>
                   <TableCell className="text-right">
-                     <Button variant="ghost" size="sm" onClick={() => handleEdit(voice)} className="mr-2">
+                     <Button variant="ghost" size="icon" onClick={() => handlePlayVoice(voice.name)} className="mr-1" aria-label="Play voice">
+                        <Volume2 className="h-4 w-4" />
+                      </Button>
+                     <Button variant="ghost" size="icon" onClick={() => handleEdit(voice)} className="mr-1" aria-label="Edit voice">
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(voice.id)} className="text-destructive hover:text-destructive">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(voice.id)} className="text-destructive hover:text-destructive" aria-label="Delete voice">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                   </TableCell>
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center h-24">No voices configured for this call center yet.</TableCell>
+                  <TableCell colSpan={4} className="text-center h-24">
+                     {voices.length === 0 ? "No voices configured for this call center yet." : "No voices match your current filters."}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -241,3 +302,5 @@ export default function VoicesPage() {
     </div>
   );
 }
+
+    

@@ -1,23 +1,23 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye } from "lucide-react";
-import type { Campaign, ScriptVariant } from "@/types"; // CallCenter type no longer needed here
+import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye, FilterX, Search } from "lucide-react";
+import type { Campaign, ScriptVariant } from "@/types";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { handleGenerateCampaignScripts } from "./actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCallCenter } from "@/contexts/CallCenterContext";
@@ -30,14 +30,12 @@ const campaignSchemaBase = z.object({
   status: z.enum(["active", "paused", "archived", "draft"]),
   targetAudience: z.string().min(10, "Target audience description is required"),
   callObjective: z.string().min(5, "Call objective is required"),
-  // callCenterId is now handled by context
   tone: z.string().min(3, "Tone for script generation is required"),
   variantCount: z.coerce.number().int().min(1).max(5).default(3),
 });
 
 type CampaignFormData = z.infer<typeof campaignSchemaBase>;
 
-// Mock data should ideally be fetched or managed globally, but for now, kept here and filtered.
 const allMockCampaigns: Campaign[] = [
     { id: "1", name: "Summer Sale Promo CC1", status: "active", targetAudience: "Existing customers aged 25-40 interested in tech.", callObjective: "Promote new summer discounts and drive sales.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, masterScript: "Hello [Customer Name], this is a call about our amazing Summer Sale!", scriptVariants: [{id: "sv1-1", name: "Variant 1", content: "Summer Sale Variant 1 content..."}]},
     { id: "2", name: "New Product Launch CC1", status: "paused", targetAudience: "New leads from recent marketing campaign.", callObjective: "Introduce new product and generate qualified leads.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2 },
@@ -49,12 +47,17 @@ const allMockCampaigns: Campaign[] = [
 
 
 export default function CampaignsPage() {
-  const { currentCallCenter, callCenters: allCallCentersList, isLoading: isCallCenterLoading } = useCallCenter();
+  const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [viewingScriptsCampaign, setViewingScriptsCampaign] = useState<Campaign | null>(null);
+  
+  // Filters
+  const [searchTermCampaigns, setSearchTermCampaigns] = useState("");
+  const [filterStatusCampaigns, setFilterStatusCampaigns] = useState<Campaign["status"] | "all">("all");
+
 
   const { control, handleSubmit, register, reset, formState: { errors }, setValue } = useForm<CampaignFormData>({
     resolver: zodResolver(campaignSchemaBase),
@@ -72,9 +75,25 @@ export default function CampaignsPage() {
     if (currentCallCenter) {
       setCampaigns(allMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
     } else {
-      setCampaigns([]); // Clear campaigns if no call center is selected
+      setCampaigns([]); 
     }
+    resetFilters();
   }, [currentCallCenter]);
+
+  const filteredCampaignsData = useMemo(() => {
+    return campaigns.filter(campaign => {
+      const matchesSearch = searchTermCampaigns === "" || 
+                            campaign.name.toLowerCase().includes(searchTermCampaigns.toLowerCase()) ||
+                            campaign.callObjective.toLowerCase().includes(searchTermCampaigns.toLowerCase());
+      const matchesStatus = filterStatusCampaigns === "all" || campaign.status === filterStatusCampaigns;
+      return matchesSearch && matchesStatus;
+    });
+  }, [campaigns, searchTermCampaigns, filterStatusCampaigns]);
+
+  const resetFilters = () => {
+    setSearchTermCampaigns("");
+    setFilterStatusCampaigns("all");
+  };
 
   const onSubmit = async (data: CampaignFormData) => {
     if (!currentCallCenter) {
@@ -116,10 +135,7 @@ export default function CampaignsPage() {
     };
 
     if (editingCampaign) {
-      // Update in the global mock list and then filter
       const updatedAllMockCampaigns = allMockCampaigns.map(c => c.id === editingCampaign.id ? { ...editingCampaign, ...campaignDataWithCallCenter, masterScript: masterScript ?? editingCampaign.masterScript, scriptVariants: scriptVariants ?? editingCampaign.scriptVariants } : c);
-      // This is a hack for mock data. In a real app, this would be an API call.
-      // For now, we'll update the source `allMockCampaigns` directly for persistence across filters
       allMockCampaigns.splice(0, allMockCampaigns.length, ...updatedAllMockCampaigns);
       setCampaigns(updatedAllMockCampaigns.filter(c => c.callCenterId === currentCallCenter.id));
 
@@ -132,8 +148,8 @@ export default function CampaignsPage() {
         masterScript,
         scriptVariants,
       };
-      allMockCampaigns.push(newCampaign); // Add to global mock list
-      setCampaigns(prev => [...prev, newCampaign]); // Add to current filtered list
+      allMockCampaigns.push(newCampaign);
+      setCampaigns(prev => [...prev, newCampaign]);
       toast({ title: "Campaign Created", description: `Campaign "${data.name}" has been successfully created.`});
     }
     
@@ -147,14 +163,13 @@ export default function CampaignsPage() {
     setEditingCampaign(campaign);
     reset({
       ...campaign,
-      tone: "Professional", // Default or fetch if stored
+      tone: (campaign as any).tone || "Professional", // Ensure tone is part of campaign type or handle default
       variantCount: campaign.scriptVariants?.length || 3,
     });
     setIsDialogOpen(true);
   };
 
   const handleDelete = (id: string) => {
-     // Remove from global mock list
     const index = allMockCampaigns.findIndex(c => c.id === id);
     if (index > -1) allMockCampaigns.splice(index, 1);
     setCampaigns(campaigns.filter(c => c.id !== id));
@@ -172,13 +187,12 @@ export default function CampaignsPage() {
 
   const openScriptGenerationDialog = (campaign: Campaign) => {
     setEditingCampaign(campaign); 
-    setValue("tone", "Professional"); 
+    setValue("tone", (campaign as any).tone || "Professional"); 
     setValue("variantCount", campaign.scriptVariants?.length || 3);
     setValue("name", campaign.name);
     setValue("targetAudience", campaign.targetAudience);
     setValue("callObjective", campaign.callObjective);
     setValue("status", campaign.status);
-    // callCenterId is implicit from currentCallCenter
     setIsDialogOpen(true); 
   };
   
@@ -264,87 +278,88 @@ export default function CampaignsPage() {
               {" "}Campaign will be associated with '{currentCallCenter.name}'.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="name">Campaign Name</Label>
-              <Input id="name" {...register("name")} className="mt-1" />
-              {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
-            </div>
-            <div>
-              <Label htmlFor="targetAudience">Target Audience</Label>
-              <Textarea id="targetAudience" {...register("targetAudience")} className="mt-1" placeholder="Describe your target audience..." />
-              {errors.targetAudience && <p className="text-sm text-destructive mt-1">{errors.targetAudience.message}</p>}
-            </div>
-            <div>
-              <Label htmlFor="callObjective">Call Objective</Label>
-              <Textarea id="callObjective" {...register("callObjective")} className="mt-1" placeholder="What is the primary goal of this campaign?" />
-              {errors.callObjective && <p className="text-sm text-destructive mt-1">{errors.callObjective.message}</p>}
-            </div>
-             <div>
-              <Label htmlFor="status">Status</Label>
-              <Controller
-                name="status"
-                control={control}
-                render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                    <SelectTrigger className="w-full mt-1">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="paused">Paused</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              {errors.status && <p className="text-sm text-destructive mt-1">{errors.status.message}</p>}
-            </div>
+          <ScrollArea className="max-h-[70vh] md:max-h-[80vh] pr-5"> {/* Added ScrollArea with padding for scrollbar */}
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="name">Campaign Name</Label>
+                <Input id="name" {...register("name")} className="mt-1" />
+                {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
+              </div>
+              <div>
+                <Label htmlFor="targetAudience">Target Audience</Label>
+                <Textarea id="targetAudience" {...register("targetAudience")} className="mt-1" placeholder="Describe your target audience..." />
+                {errors.targetAudience && <p className="text-sm text-destructive mt-1">{errors.targetAudience.message}</p>}
+              </div>
+              <div>
+                <Label htmlFor="callObjective">Call Objective</Label>
+                <Textarea id="callObjective" {...register("callObjective")} className="mt-1" placeholder="What is the primary goal of this campaign?" />
+                {errors.callObjective && <p className="text-sm text-destructive mt-1">{errors.callObjective.message}</p>}
+              </div>
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Controller
+                  name="status"
+                  control={control}
+                  render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                      <SelectTrigger className="w-full mt-1">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="paused">Paused</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.status && <p className="text-sm text-destructive mt-1">{errors.status.message}</p>}
+              </div>
 
-            <Card className="bg-muted/50 p-4">
-              <CardHeader className="p-0 pb-2">
-                <CardTitle className="text-base">Script Generation Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0 space-y-3">
-                <div>
-                  <Label htmlFor="tone">Desired Tone for Scripts</Label>
-                   <Controller
-                      name="tone"
-                      control={control}
-                      render={({ field }) => (
-                      <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                          <SelectTrigger className="w-full mt-1">
-                          <SelectValue placeholder="Select tone" />
-                          </SelectTrigger>
-                          <SelectContent>
-                          <SelectItem value="Professional">Professional</SelectItem>
-                          <SelectItem value="Friendly">Friendly</SelectItem>
-                          <SelectItem value="Empathetic">Empathetic</SelectItem>
-                          <SelectItem value="Urgent">Urgent</SelectItem>
-                          <SelectItem value="Informative">Informative</SelectItem>
-                          </SelectContent>
-                      </Select>
-                      )}
-                  />
-                  {errors.tone && <p className="text-sm text-destructive mt-1">{errors.tone.message}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="variantCount">Number of Script Variants (1-5)</Label>
-                  <Input id="variantCount" type="number" {...register("variantCount")} className="mt-1" min="1" max="5" />
-                  {errors.variantCount && <p className="text-sm text-destructive mt-1">{errors.variantCount.message}</p>}
-                </div>
-              </CardContent>
-            </Card>
-            
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isGeneratingScripts}>Cancel</Button>
-              <Button type="submit" disabled={isGeneratingScripts}>
-                {isGeneratingScripts && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingCampaign ? "Save & Re-generate Scripts" : "Create & Generate Scripts"}
-              </Button>
-            </DialogFooter>
-          </form>
+              <Card className="bg-muted/50 p-4">
+                <CardHeader className="p-0 pb-2">
+                  <CardTitle className="text-base">Script Generation Settings</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 space-y-3">
+                  <div>
+                    <Label htmlFor="tone">Desired Tone for Scripts</Label>
+                    <Controller
+                        name="tone"
+                        control={control}
+                        render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                            <SelectTrigger className="w-full mt-1">
+                            <SelectValue placeholder="Select tone" />
+                            </SelectTrigger>
+                            <SelectContent>
+                            <SelectItem value="Professional">Professional</SelectItem>
+                            <SelectItem value="Friendly">Friendly</SelectItem>
+                            <SelectItem value="Empathetic">Empathetic</SelectItem>
+                            <SelectItem value="Urgent">Urgent</SelectItem>
+                            <SelectItem value="Informative">Informative</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        )}
+                    />
+                    {errors.tone && <p className="text-sm text-destructive mt-1">{errors.tone.message}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="variantCount">Number of Script Variants (1-5)</Label>
+                    <Input id="variantCount" type="number" {...register("variantCount")} className="mt-1" min="1" max="5" />
+                    {errors.variantCount && <p className="text-sm text-destructive mt-1">{errors.variantCount.message}</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </form>
+          </ScrollArea>
+          <DialogFooter className="pt-4 border-t mt-2"> {/* Ensure footer is outside scroll area */}
+            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isGeneratingScripts}>Cancel</Button>
+            <Button type="submit" form="campaignForm" disabled={isGeneratingScripts} onClick={handleSubmit(onSubmit)}> {/* Associate button with form if needed */}
+              {isGeneratingScripts && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {editingCampaign ? "Save & Re-generate Scripts" : "Create & Generate Scripts"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -355,7 +370,7 @@ export default function CampaignsPage() {
             <DialogDescription>Master script and its variants generated for this campaign.</DialogDescription>
           </DialogHeader>
           {viewingScriptsCampaign && (
-            <ScrollArea className="max-h-[60vh] p-1">
+            <ScrollArea className="max-h-[60vh] p-1 pr-4">
               <div className="space-y-4 py-4">
                 {viewingScriptsCampaign.masterScript && (
                   <Card>
@@ -395,6 +410,43 @@ export default function CampaignsPage() {
       </Dialog>
 
       <Card className="shadow-lg">
+         <CardHeader>
+          <CardTitle>Filter Campaigns</CardTitle>
+          <CardDescription>Refine the list of campaigns within {currentCallCenter.name}.</CardDescription>
+           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div className="md:col-span-2">
+              <Label htmlFor="campaignSearch">Search by Name/Objective</Label>
+              <div className="relative mt-1">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="campaignSearch"
+                  placeholder="Enter campaign name or objective..."
+                  value={searchTermCampaigns}
+                  onChange={(e) => setSearchTermCampaigns(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="campaignStatusFilter">Status</Label>
+              <Select value={filterStatusCampaigns} onValueChange={(value) => setFilterStatusCampaigns(value as Campaign["status"] | "all")}>
+                <SelectTrigger id="campaignStatusFilter" className="w-full mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+             <Button onClick={resetFilters} variant="outline" size="sm" className="md:col-start-3">
+                <FilterX className="mr-2 h-4 w-4" /> Reset Filters
+            </Button>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -408,7 +460,7 @@ export default function CampaignsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {campaigns.length > 0 ? campaigns.map((campaign) => (
+              {filteredCampaignsData.length > 0 ? filteredCampaignsData.map((campaign) => (
                 <TableRow key={campaign.id}>
                   <TableCell className="font-medium">{campaign.name}</TableCell>
                   <TableCell>
@@ -460,7 +512,9 @@ export default function CampaignsPage() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24">No campaigns found for this call center. Create one to get started!</TableCell>
+                  <TableCell colSpan={6} className="text-center h-24">
+                    {campaigns.length === 0 ? "No campaigns found for this call center. Create one to get started!" : "No campaigns match your current filters."}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -470,3 +524,5 @@ export default function CampaignsPage() {
     </div>
   );
 }
+
+    

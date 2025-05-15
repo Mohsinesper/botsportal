@@ -10,22 +10,30 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Wand2, Lightbulb, BarChart } from "lucide-react";
+import { Loader2, Wand2, Lightbulb, BarChart, Mic, Cpu as BotIcon } from "lucide-react"; // Added Mic and BotIcon
 import type { AgentOptimizationInput, AgentOptimizationOutput } from "@/ai/flows/agent-optimization-suggestions";
 import { handleSuggestOptimization } from "./actions";
 import { toast } from "@/hooks/use-toast";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
-// Example: "Welcome Script Variant 1:Ava - Friendly Female:0.75,Sales Pitch Variant 2:John - Professional Male:0.82"
+
 const performanceDataSchema = z.string().refine(
   (data) => {
-    if (!data.trim()) return true; // Allow empty for initial state, actual validation can be stricter if needed
+    if (!data.trim()) return true; 
     const entries = data.split(',');
     return entries.every(entry => {
       const parts = entry.split(':');
-      // Ensure metric is a number, allow script/voice names to be flexible
       return parts.length === 3 && !isNaN(parseFloat(parts[2])) && parts[0].trim() !== "" && parts[1].trim() !== "";
     });
   },
@@ -40,6 +48,14 @@ const agentOptimizationSchema = z.object({
 
 type AgentOptimizationFormData = z.infer<typeof agentOptimizationSchema>;
 
+// For "Add as Bot(s)" Dialog
+const addBotSchema = z.object({
+  botNamePrefix: z.string().min(1, "Prefix is required").default("OptimizedBot"),
+  botCount: z.coerce.number().int().min(1, "At least one bot").max(100).default(1),
+});
+type AddBotFormData = z.infer<typeof addBotSchema>;
+
+
 function parsePerformanceData(dataString: string): Record<string, Record<string, number>> {
   const performanceMap: Record<string, Record<string, number>> = {};
   if (!dataString.trim()) return performanceMap;
@@ -51,7 +67,7 @@ function parsePerformanceData(dataString: string): Record<string, Record<string,
       const scriptVariantName = parts[0].trim(); 
       const voiceName = parts[1].trim(); 
       const metric = parseFloat(parts[2]);
-      if (!isNaN(metric) && scriptVariantName && voiceName) { // Ensure names are not empty
+      if (!isNaN(metric) && scriptVariantName && voiceName) { 
         if (!performanceMap[scriptVariantName]) {
           performanceMap[scriptVariantName] = {};
         }
@@ -62,7 +78,6 @@ function parsePerformanceData(dataString: string): Record<string, Record<string,
   return performanceMap;
 }
 
-// Mock default data per call center (if needed for pre-population)
 const mockDefaultData: Record<string, AgentOptimizationFormData> = {
   cc1: {
     scriptVariants: "Welcome Script (CC1), Sales Pitch (CC1), Closing Script (CC1)",
@@ -87,17 +102,22 @@ export default function AgentOptimizationPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<AgentOptimizationOutput["suggestions"] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isAddBotDialogOpen, setIsAddBotDialogOpen] = useState(false);
+  const [currentSuggestionForBot, setCurrentSuggestionForBot] = useState<AgentOptimizationOutput["suggestions"][0] | null>(null);
   
   const { handleSubmit, register, formState: { errors }, reset } = useForm<AgentOptimizationFormData>({
     resolver: zodResolver(agentOptimizationSchema),
-    // Default values will be set based on currentCallCenter in useEffect
+  });
+
+  const addBotForm = useForm<AddBotFormData>({
+    resolver: zodResolver(addBotSchema),
   });
 
   useEffect(() => {
     if (currentCallCenter) {
       reset(mockDefaultData[currentCallCenter.id] || { scriptVariants: "", voices: "", performanceData: ""});
     } else {
-      reset({ scriptVariants: "", voices: "", performanceData: ""}); // Reset if no call center
+      reset({ scriptVariants: "", voices: "", performanceData: ""}); 
     }
   }, [currentCallCenter, reset]);
 
@@ -112,8 +132,8 @@ export default function AgentOptimizationPage() {
     setSuggestions(null);
 
     const inputForAI: AgentOptimizationInput = {
-      scriptVariants: data.scriptVariants.split(',').map(s => s.trim()).filter(s => s), // Filter out empty strings
-      voices: data.voices.split(',').map(v => v.trim()).filter(v => v), // Filter out empty strings
+      scriptVariants: data.scriptVariants.split(',').map(s => s.trim()).filter(s => s),
+      voices: data.voices.split(',').map(v => v.trim()).filter(v => v),
       performanceData: parsePerformanceData(data.performanceData),
     };
     
@@ -123,7 +143,6 @@ export default function AgentOptimizationPage() {
         setIsLoading(false);
         return;
     }
-
 
     const result = await handleSuggestOptimization(inputForAI);
 
@@ -139,6 +158,30 @@ export default function AgentOptimizationPage() {
     }
     setIsLoading(false);
   };
+
+  const handleMockCall = (suggestion: AgentOptimizationOutput["suggestions"][0]) => {
+    toast({
+      title: "Mock Call Initiated (Simulated)",
+      description: `Script: ${suggestion.scriptVariant}, Voice: ${suggestion.voice}. Call is now active.`,
+    });
+  };
+
+  const handleOpenAddBotDialog = (suggestion: AgentOptimizationOutput["suggestions"][0]) => {
+    setCurrentSuggestionForBot(suggestion);
+    addBotForm.reset({ botNamePrefix: `${suggestion.scriptVariant.replace(/\s+/g, '')}Bot`, botCount: 1});
+    setIsAddBotDialogOpen(true);
+  };
+
+  const handleAddBots = (data: AddBotFormData) => {
+    if (!currentSuggestionForBot) return;
+    toast({
+      title: "Bots Generation Started (Simulated)",
+      description: `${data.botCount} bot(s) with prefix "${data.botNamePrefix}" using script "${currentSuggestionForBot.scriptVariant}" and voice "${currentSuggestionForBot.voice}" are being created.`,
+    });
+    setIsAddBotDialogOpen(false);
+    setCurrentSuggestionForBot(null);
+  };
+
 
   if (isCallCenterLoading) {
     return (
@@ -245,17 +288,25 @@ export default function AgentOptimizationPage() {
           <CardContent className="space-y-4">
             {suggestions.map((suggestion, index) => (
               <Card key={index} className="bg-muted/30">
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-3">
                   <CardTitle className="text-lg flex items-center">
                     <Lightbulb className="mr-2 h-5 w-5 text-primary" />
                     Suggestion {index + 1}: <span className="ml-2 font-semibold text-primary">{suggestion.scriptVariant}</span> with <span className="ml-1 font-semibold text-primary">{suggestion.voice}</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-foreground/80 flex items-start">
+                  <p className="text-sm text-foreground/80 flex items-start mb-3">
                     <BarChart className="mr-2 mt-1 h-4 w-4 text-accent flex-shrink-0" />
                     <strong>Rationale:</strong> {suggestion.rationale}
                   </p>
+                   <div className="flex space-x-2">
+                    <Button variant="outline" size="sm" onClick={() => handleMockCall(suggestion)}>
+                      <Mic className="mr-2 h-4 w-4" /> Mock Call (Simulated)
+                    </Button>
+                    <Button variant="default" size="sm" onClick={() => handleOpenAddBotDialog(suggestion)}>
+                      <BotIcon className="mr-2 h-4 w-4" /> Add as Bot(s)
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -272,6 +323,38 @@ export default function AgentOptimizationPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={isAddBotDialogOpen} onOpenChange={setIsAddBotDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Bot(s) from Suggestion</DialogTitle>
+            <DialogDescription>
+              Configure new bot(s) based on: <br />
+              Script: <strong>{currentSuggestionForBot?.scriptVariant}</strong> <br/>
+              Voice: <strong>{currentSuggestionForBot?.voice}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={addBotForm.handleSubmit(handleAddBots)} className="space-y-4 py-4">
+             <div>
+                <Label htmlFor="botNamePrefix">Bot Name Prefix</Label>
+                <Input id="botNamePrefix" {...addBotForm.register("botNamePrefix")} className="mt-1" />
+                {addBotForm.formState.errors.botNamePrefix && <p className="text-sm text-destructive mt-1">{addBotForm.formState.errors.botNamePrefix.message}</p>}
+            </div>
+            <div>
+                <Label htmlFor="botCount">Number of Bots</Label>
+                <Input id="botCount" type="number" {...addBotForm.register("botCount")} className="mt-1" min="1" max="100" />
+                {addBotForm.formState.errors.botCount && <p className="text-sm text-destructive mt-1">{addBotForm.formState.errors.botCount.message}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddBotDialogOpen(false)}>Cancel</Button>
+              <Button type="submit">Add Bot(s) (Simulated)</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
+
+    
