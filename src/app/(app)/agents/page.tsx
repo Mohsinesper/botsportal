@@ -25,6 +25,9 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import * as z from "zod"; // Added Zod import
+import { useForm } from "react-hook-form"; // Added for duplicateForm
+import { zodResolver } from "@hookform/resolvers/zod"; // Added for duplicateForm
 
 interface EditingAgentState {
   id: string;
