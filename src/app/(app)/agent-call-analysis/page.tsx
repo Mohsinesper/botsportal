@@ -5,57 +5,71 @@ import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Loader2, Lightbulb, BarChartIcon } from "lucide-react";
+import { Loader2, Lightbulb, BarChartIcon, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Campaign, CallFlow, CallFlowStepAnalysis, CampaignDropAnalysis } from "@/types";
-import { MOCK_CAMPAIGNS } from "@/lib/mock-data"; // Assuming campaigns are here
+import type { Campaign, CallFlow, CallFlowStepAnalysis, CampaignDropAnalysis, Agent, Voice } from "@/types";
+import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES } from "@/lib/mock-data"; 
 import { toast } from "@/hooks/use-toast";
 import { handleAnalyzeCallDrop } from "./actions"; 
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input"; // Added Input for search
 
 export default function AgentCallAnalysisPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
   const { currentUser, isLoading: isAuthLoading } = useAuth();
   
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | undefined>();
+  const [agentsForCallCenter, setAgentsForCallCenter] = useState<Agent[]>([]);
+  const [voices, setVoices] = useState<Voice[]>([]);
+  
+  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>();
   const [analysisData, setAnalysisData] = useState<CampaignDropAnalysis | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
+  const [isLoadingPageData, setIsLoadingPageData] = useState(true);
+  const [agentSearchTerm, setAgentSearchTerm] = useState("");
+
 
   useEffect(() => {
     if (currentCallCenter) {
-      // Filter campaigns for the current call center
       const ccCampaigns = MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id);
       setCampaigns(ccCampaigns);
-      setSelectedCampaignId(ccCampaigns[0]?.id); // Select first campaign by default
+      const ccAgents = MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id);
+      setAgentsForCallCenter(ccAgents);
+      setVoices(MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id));
+      setSelectedAgentId(ccAgents[0]?.id); 
     } else {
       setCampaigns([]);
-      setSelectedCampaignId(undefined);
+      setAgentsForCallCenter([]);
+      setVoices([]);
+      setSelectedAgentId(undefined);
     }
-    setIsLoadingCampaigns(false);
+    setIsLoadingPageData(false);
   }, [currentCallCenter]);
 
   useEffect(() => {
-    if (selectedCampaignId) {
-      const campaign = campaigns.find(c => c.id === selectedCampaignId);
-      if (campaign && campaign.callFlows && campaign.callFlows.length > 0) {
-        // Simulate drop analysis for the first call flow (master)
-        const masterFlow = campaign.callFlows[0];
-        const simulatedAnalysis = simulateDropAnalysis(masterFlow, campaign.name);
-        setAnalysisData(simulatedAnalysis);
-        setAiSuggestions(null); // Reset AI suggestions when campaign changes
+    if (selectedAgentId) {
+      const agent = agentsForCallCenter.find(a => a.id === selectedAgentId);
+      if (agent) {
+        const campaign = campaigns.find(c => c.id === agent.campaignId);
+        if (campaign && campaign.callFlows && campaign.callFlows.length > 0) {
+          const masterFlow = campaign.callFlows[0];
+          const simulatedAnalysis = simulateDropAnalysis(masterFlow, campaign.name);
+          setAnalysisData(simulatedAnalysis);
+          setAiSuggestions(null); 
+        } else {
+          setAnalysisData(null);
+        }
       } else {
-        setAnalysisData(null);
+         setAnalysisData(null);
       }
     } else {
       setAnalysisData(null);
     }
-  }, [selectedCampaignId, campaigns]);
+  }, [selectedAgentId, agentsForCallCenter, campaigns]);
 
   const simulateDropAnalysis = (callFlow: CallFlow, campaignName: string): CampaignDropAnalysis => {
     const initialCalls = 1000;
@@ -68,9 +82,8 @@ export default function AgentCallAnalysisPage() {
       const step = callFlow.steps[stepKey];
       const callsReached = remainingCalls;
       
-      // Simulate drop rate: higher for complex steps or questions
-      let dropPercentage = (step.wait_for_response || step.conditions) ? Math.random() * 0.20 + 0.05 : Math.random() * 0.05 + 0.02; // 5-25% for interactive, 2-7% for non-interactive
-      if (stepKey.includes("exit") || !step.next && !step.conditions) dropPercentage = 1.0; // All remaining drop at exit
+      let dropPercentage = (step.wait_for_response || step.conditions) ? Math.random() * 0.20 + 0.05 : Math.random() * 0.05 + 0.02;
+      if (stepKey.includes("exit") || !step.next && !step.conditions) dropPercentage = 1.0;
 
       const callsDropped = Math.min(remainingCalls, Math.floor(callsReached * dropPercentage));
       remainingCalls -= callsDropped;
@@ -84,7 +97,6 @@ export default function AgentCallAnalysisPage() {
       });
 
       if (stepKey === callFlow.default_exit || !step.next && (!step.conditions || step.conditions.length === 0)) {
-          // If it's an exit point, ensure all remaining calls are "dropped" here for the simulation
           if(remainingCalls > 0 && stepsAnalysis.length > 0){
              const lastAnalysisStep = stepsAnalysis[stepsAnalysis.length -1];
              lastAnalysisStep.callsDropped += remainingCalls;
@@ -98,12 +110,11 @@ export default function AgentCallAnalysisPage() {
   };
 
   const handleTriggerAIAnalysis = async () => {
-    if (!analysisData || analysisData.stepsAnalysis.length === 0) {
-      toast({ title: "No Data", description: "No call flow data to analyze.", variant: "destructive" });
+    if (!analysisData || analysisData.stepsAnalysis.length === 0 || !selectedAgentId) {
+      toast({ title: "No Data", description: "No call flow data or agent selected to analyze.", variant: "destructive" });
       return;
     }
 
-    // Find step with highest drop count (excluding perfect drop rates at exits for simulation)
     const significantDropStep = analysisData.stepsAnalysis
       .filter(s => s.dropRate > 0 && s.dropRate < 100) 
       .sort((a, b) => b.callsDropped - a.callsDropped)[0];
@@ -114,8 +125,14 @@ export default function AgentCallAnalysisPage() {
       return;
     }
     
-    const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
-    const callFlow = selectedCampaign?.callFlows?.[0];
+    const agent = agentsForCallCenter.find(a => a.id === selectedAgentId);
+    if (!agent) {
+        toast({ title: "Error", description: "Selected agent not found.", variant: "destructive" });
+        return;
+    }
+    const campaign = campaigns.find(c => c.id === agent.campaignId);
+    const callFlow = campaign?.callFlows?.[0];
+
     if (!callFlow || !callFlow.steps[significantDropStep.stepKey]) {
         toast({title: "Error", description: "Could not find step details for analysis.", variant: "destructive"});
         return;
@@ -125,7 +142,7 @@ export default function AgentCallAnalysisPage() {
     setAiSuggestions(null);
     try {
       const result = await handleAnalyzeCallDrop({
-        campaignName: analysisData.campaignName,
+        campaignName: analysisData.campaignName, // This is still campaign name from the analysis data
         stepName: significantDropStep.stepKey,
         stepText: callFlow.steps[significantDropStep.stepKey].text,
         dropOffPercentage: significantDropStep.dropRate,
@@ -145,7 +162,14 @@ export default function AgentCallAnalysisPage() {
     setIsAnalyzing(false);
   };
   
-  const isLoading = isAuthLoading || isCallCenterLoading || isLoadingCampaigns;
+  const isLoading = isAuthLoading || isCallCenterLoading || isLoadingPageData;
+
+  const filteredAgentsForDropdown = useMemo(() => {
+    if (!agentSearchTerm) return agentsForCallCenter;
+    return agentsForCallCenter.filter(agent =>
+      agent.name.toLowerCase().includes(agentSearchTerm.toLowerCase())
+    );
+  }, [agentsForCallCenter, agentSearchTerm]);
 
   if (isLoading) {
     return (
@@ -174,25 +198,46 @@ export default function AgentCallAnalysisPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Campaign Selection</CardTitle>
-          <CardDescription>Select a campaign to analyze its call flow drop points.</CardDescription>
+          <CardTitle>Agent Selection</CardTitle>
+          <CardDescription>Select an agent to analyze their campaign's call flow drop points.</CardDescription>
         </CardHeader>
         <CardContent>
-          {campaigns.length > 0 ? (
-            <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+          {agentsForCallCenter.length > 0 ? (
+            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
               <SelectTrigger className="w-full md:w-1/2">
-                <SelectValue placeholder="Select a campaign" />
+                <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
               <SelectContent>
-                {campaigns.map(campaign => (
-                  <SelectItem key={campaign.id} value={campaign.id} disabled={!campaign.callFlows || campaign.callFlows.length === 0}>
-                    {campaign.name} {!campaign.callFlows || campaign.callFlows.length === 0 ? "(No call flow)" : ""}
-                  </SelectItem>
-                ))}
+                <div className="p-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search agents..."
+                      value={agentSearchTerm}
+                      onChange={(e) => setAgentSearchTerm(e.target.value)}
+                      className="w-full pl-8 h-9"
+                      onClick={(e) => e.stopPropagation()} 
+                    />
+                  </div>
+                </div>
+                {filteredAgentsForDropdown.map(agent => {
+                   const campaign = campaigns.find(c => c.id === agent.campaignId);
+                   const voice = voices.find(v => v.id === agent.voiceId);
+                   const scriptVariant = campaign?.callFlows?.[0]?.name; // Assuming master flow name implies script
+                   return (
+                      <SelectItem key={agent.id} value={agent.id} disabled={!campaign?.callFlows || campaign.callFlows.length === 0}>
+                        {agent.name} ({scriptVariant || 'N/A Script'}, {voice?.name || 'N/A Voice'})
+                        {!campaign?.callFlows || campaign.callFlows.length === 0 ? " (No call flow in campaign)" : ""}
+                      </SelectItem>
+                   );
+                })}
+                {filteredAgentsForDropdown.length === 0 && (
+                  <div className="p-2 text-center text-sm text-muted-foreground">No agents found.</div>
+                )}
               </SelectContent>
             </Select>
           ) : (
-            <p className="text-muted-foreground">No campaigns available for '{currentCallCenter.name}'. Please <Link href="/campaigns" className="underline text-primary">create a campaign with a call flow</Link>.</p>
+            <p className="text-muted-foreground">No agents configured for '{currentCallCenter.name}'. Please <Link href="/agents" className="underline text-primary">configure agents</Link>.</p>
           )}
         </CardContent>
       </Card>
@@ -206,7 +251,7 @@ export default function AgentCallAnalysisPage() {
                 Simulated Call Drop-off Funnel
               </CardTitle>
               <CardDescription>
-                Visualization of simulated call drops at each step for '{analysisData.campaignName}'. Started with {analysisData.totalInitialCalls} calls.
+                Visualization of simulated call drops for agent '{agentsForCallCenter.find(a=>a.id === selectedAgentId)?.name}' on campaign '{analysisData.campaignName}'. Started with {analysisData.totalInitialCalls} calls.
               </CardDescription>
             </CardHeader>
             <CardContent className="h-[400px] pt-4">
@@ -233,7 +278,7 @@ export default function AgentCallAnalysisPage() {
               <CardDescription>Get AI-powered insights on potential reasons for call drops.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={handleTriggerAIAnalysis} disabled={isAnalyzing} className="w-full">
+              <Button onClick={handleTriggerAIAnalysis} disabled={isAnalyzing || !selectedAgentId} className="w-full">
                 {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lightbulb className="mr-2 h-4 w-4" />}
                 Analyze Highest Drop Point (Mock AI)
               </Button>
@@ -249,11 +294,12 @@ export default function AgentCallAnalysisPage() {
             </CardFooter>
           </Card>
         </div>
-      ) : selectedCampaignId ? (
-         <Card><CardHeader><CardTitle>No Call Flow Data</CardTitle></CardHeader><CardContent><p>The selected campaign does not have a call flow defined or it has no steps. Please <Link href="/campaigns" className="text-primary underline">edit the campaign</Link> to add a call flow.</p></CardContent></Card>
-      ) : !isLoading && campaigns.length > 0 ? (
-         <Card><CardHeader><CardTitle>Select a Campaign</CardTitle></CardHeader><CardContent><p>Please select a campaign above to view its call drop analysis.</p></CardContent></Card>
+      ) : selectedAgentId ? (
+         <Card><CardHeader><CardTitle>No Call Flow Data</CardTitle></CardHeader><CardContent><p>The selected agent's campaign does not have a call flow defined or it has no steps. Please <Link href="/campaigns" className="text-primary underline">edit the campaign</Link> to add a call flow.</p></CardContent></Card>
+      ) : !isLoading && agentsForCallCenter.length > 0 ? (
+         <Card><CardHeader><CardTitle>Select an Agent</CardTitle></CardHeader><CardContent><p>Please select an agent above to view their call drop analysis.</p></CardContent></Card>
       ) : null}
     </div>
   );
 }
+
