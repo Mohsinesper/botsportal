@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlusCircle, Edit2, Trash2, Volume2, Search, FilterX } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "@/hooks/use-toast";
@@ -17,7 +17,11 @@ import type { Voice } from "@/types";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MOCK_VOICES } from "@/lib/mock-data"; // Import centralized mock data
+import { MOCK_VOICES } from "@/lib/mock-data"; 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+
+const AVAILABLE_BACKGROUND_NOISES = ["None", "Cafe Ambience", "Office Hum", "Street Sounds", "Rainfall", "Light Music"] as const;
 
 const voiceSchemaBase = z.object({
   id: z.string().optional(),
@@ -32,6 +36,8 @@ const voiceSchemaBase = z.object({
       return false;
     }
   }, { message: "Settings must be valid JSON or empty"}),
+  backgroundNoise: z.enum(AVAILABLE_BACKGROUND_NOISES).optional(),
+  backgroundNoiseVolume: z.coerce.number().min(0).max(100).optional(),
 });
 
 type VoiceFormData = z.infer<typeof voiceSchemaBase>;
@@ -42,18 +48,21 @@ export default function VoicesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
 
-  // Filters
   const [searchTermVoices, setSearchTermVoices] = useState("");
   const [filterProviderVoices, setFilterProviderVoices] = useState("");
   
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<VoiceFormData>({
+  const { control, register, handleSubmit, reset, watch, formState: { errors } } = useForm<VoiceFormData>({
     resolver: zodResolver(voiceSchemaBase),
     defaultValues: { 
       name: "", 
       provider: "", 
       settings: "",
+      backgroundNoise: "None",
+      backgroundNoiseVolume: 25,
     },
   });
+
+  const watchedBackgroundNoise = watch("backgroundNoise");
 
   useEffect(() => {
     if (currentCallCenter) {
@@ -84,10 +93,13 @@ export default function VoicesPage() {
     }
 
     const voiceData: Voice = {
-      ...data,
       id: editingVoice ? editingVoice.id : `v-${Date.now()}`,
+      name: data.name,
+      provider: data.provider,
       settings: data.settings ? JSON.parse(data.settings) : undefined,
       callCenterId: currentCallCenter.id,
+      backgroundNoise: data.backgroundNoise === "None" ? undefined : data.backgroundNoise,
+      backgroundNoiseVolume: data.backgroundNoise !== "None" ? data.backgroundNoiseVolume : undefined,
     };
 
     if (editingVoice) {
@@ -102,7 +114,7 @@ export default function VoicesPage() {
       toast({ title: "Voice Added", description: `Voice "${voiceData.name}" added.` });
     }
     setIsDialogOpen(false);
-    reset({ name: "", provider: "", settings: "" });
+    reset({ name: "", provider: "", settings: "", backgroundNoise: "None", backgroundNoiseVolume: 25 });
     setEditingVoice(null);
   };
 
@@ -112,6 +124,8 @@ export default function VoicesPage() {
       name: voice.name,
       provider: voice.provider,
       settings: voice.settings ? JSON.stringify(voice.settings, null, 2) : "",
+      backgroundNoise: voice.backgroundNoise || "None",
+      backgroundNoiseVolume: voice.backgroundNoiseVolume || 25,
     });
     setIsDialogOpen(true);
   };
@@ -167,7 +181,7 @@ export default function VoicesPage() {
         <h2 className="text-3xl font-bold tracking-tight">Voice Management ({currentCallCenter.name})</h2>
         <Button onClick={() => { 
           setEditingVoice(null); 
-          reset({ name: "", provider: "", settings: ""}); 
+          reset({ name: "", provider: "", settings: "", backgroundNoise: "None", backgroundNoiseVolume: 25 }); 
           setIsDialogOpen(true); 
         }}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add Voice
@@ -178,7 +192,7 @@ export default function VoicesPage() {
         setIsDialogOpen(isOpen);
         if (!isOpen) {
           setEditingVoice(null);
-          reset({ name: "", provider: "", settings: ""});
+          reset({ name: "", provider: "", settings: "", backgroundNoise: "None", backgroundNoiseVolume: 25 });
         }
       }}>
         <DialogContent className="sm:max-w-md">
@@ -208,6 +222,49 @@ export default function VoicesPage() {
               />
               {errors.settings && <p className="text-sm text-destructive mt-1">{errors.settings.message}</p>}
             </div>
+             <div>
+              <Label htmlFor="backgroundNoise">Background Noise</Label>
+              <Controller
+                name="backgroundNoise"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value || "None"}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select background noise" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AVAILABLE_BACKGROUND_NOISES.map(noise => (
+                        <SelectItem key={noise} value={noise}>{noise}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+
+            {watchedBackgroundNoise && watchedBackgroundNoise !== "None" && (
+              <div>
+                <Label htmlFor="backgroundNoiseVolume">Background Noise Volume ({watch("backgroundNoiseVolume") || 0}%)</Label>
+                <Controller
+                  name="backgroundNoiseVolume"
+                  control={control}
+                  defaultValue={25}
+                  render={({ field: { value, onChange } }) => (
+                    <Slider
+                      id="backgroundNoiseVolume"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[value || 0]}
+                      onValueChange={(vals) => onChange(vals[0])}
+                      className="mt-2"
+                    />
+                  )}
+                />
+                 {errors.backgroundNoiseVolume && <p className="text-sm text-destructive mt-1">{errors.backgroundNoiseVolume.message}</p>}
+              </div>
+            )}
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
               <Button type="submit">{editingVoice ? "Save Changes" : "Add Voice"}</Button>
@@ -259,6 +316,7 @@ export default function VoicesPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead>Settings Preview</TableHead>
+                <TableHead>Background Noise</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -267,8 +325,13 @@ export default function VoicesPage() {
                 <TableRow key={voice.id}>
                   <TableCell className="font-medium">{voice.name}</TableCell>
                   <TableCell>{voice.provider || "N/A"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground truncate max-w-xs">
+                  <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">
                     {voice.settings ? JSON.stringify(voice.settings) : "N/A"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {voice.backgroundNoise && voice.backgroundNoise !== "None" 
+                      ? `${voice.backgroundNoise} (${voice.backgroundNoiseVolume || 0}%)` 
+                      : "None"}
                   </TableCell>
                   <TableCell className="text-right">
                      <Button variant="ghost" size="icon" onClick={() => handlePlayVoice(voice.name)} className="mr-1" aria-label="Play voice">
@@ -284,7 +347,7 @@ export default function VoicesPage() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center h-24">
+                  <TableCell colSpan={5} className="text-center h-24">
                      {voices.length === 0 ? "No voices configured for this call center yet." : "No voices match your current filters."}
                   </TableCell>
                 </TableRow>

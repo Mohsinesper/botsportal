@@ -7,6 +7,7 @@ export interface User {
   name?: string;
   role: UserRole;
   assignedCallCenterIds?: string[]; // Relevant for CALL_CENTER_ADMIN and DESIGN_ADMIN
+  is2FAEnabled?: boolean;
 }
 
 export type BillingRateType = "per_call" | "per_hour" | "per_day" | "per_month";
@@ -20,7 +21,7 @@ export interface CallCenter {
   billingConfig?: {
     rateType: BillingRateType;
     amount: number; 
-    currency: string; 
+    currency: "USD" | "EUR" | "GBP"; 
   };
 }
 
@@ -65,19 +66,18 @@ export interface Campaign {
   id: string;
   name: string;
   status: "active" | "paused" | "archived" | "draft";
-  targetAudience: string; // Kept for metadata
-  callObjective: string;  // Kept for metadata
+  targetAudience?: string; 
+  callObjective?: string;  
   createdDate: string;
   callCenterId: string;
   conversionRate?: number;
   
-  userMasterScript?: string; // User's initial raw master script text
-  callFlows?: CallFlow[];    // Array of generated/approved call flow JSONs
+  userMasterScript?: string; 
+  callFlows?: CallFlow[];    
 
-  // Previous script fields - to be reviewed if still needed
-  masterScript?: string; // This was plain text master script
-  scriptVariants?: ScriptVariant[]; // This was plain text variants
-  tone?: string; // Kept for metadata, might guide AI if user doesn't provide full structured script initially
+  masterScript?: string; 
+  scriptVariants?: ScriptVariant[]; 
+  tone?: string; 
 }
 
 export interface Voice {
@@ -86,14 +86,14 @@ export interface Voice {
   provider?: string;
   settings?: Record<string, any>;
   callCenterId: string;
+  backgroundNoise?: string; // e.g., "Cafe Ambience", "None"
+  backgroundNoiseVolume?: number; // e.g., 0-100
 }
 
 export interface Agent {
   id: string;
   name: string;
   campaignId: string; 
-  // Agent might now be associated with a campaign, and implicitly one of its CallFlows (e.g. the master, or a specific variant by index/name)
-  // scriptVariantId: string; // This might change if variants are part of CallFlow
   voiceId: string;
   callCenterId: string;
   performanceMetric?: number;
@@ -103,7 +103,7 @@ export interface Bot {
   id: string;
   name: string;
   campaignId: string;
-  agentId: string; // Agent now implies a specific call flow and voice
+  agentId: string; 
   status: "active" | "inactive" | "error";
   creationDate: string;
   callCenterId: string;
@@ -114,7 +114,7 @@ export interface Bot {
   totalCalls?: number;
 }
 
-export interface Script { // This seems like a more generic script type, might not be used for call flows
+export interface Script { 
   id: string;
   name: string;
   content: string;

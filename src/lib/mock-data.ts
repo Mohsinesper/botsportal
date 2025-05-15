@@ -1,5 +1,5 @@
 
-import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow } from "@/types"; // Added CallFlow
+import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow } from "@/types";
 
 // Example Call Flow (Master)
 const exampleMasterCallFlow: CallFlow = {
@@ -32,7 +32,7 @@ const exampleMasterCallFlow: CallFlow = {
     "qualification_confirmed_step": {
       description: "Customer confirms they have Part A and B.",
       audio_file: "qualify.wav",
-      wait_for_response: false, // Or true if asking if they want to hear more
+      wait_for_response: false, 
       next: "offer_program_step",
       text: "That's great! Since you have Medicare Part A and Part B, you may qualify for our benefits program.",
       voice_settings: { stability: 0.5, similarity_boost: 0.75 }
@@ -43,7 +43,7 @@ const exampleMasterCallFlow: CallFlow = {
       wait_for_response: true,
       timeout: 10,
       conditions: [
-        { type: "contains", keywords: ["yes", "okay", "sure", "tell me more"], next: "transfer_to_agent_step" }, // Example next step
+        { type: "contains", keywords: ["yes", "okay", "sure", "tell me more"], next: "transfer_to_agent_step" }, 
         { type: "default", next: "graceful_exit_step" }
       ],
       text: "Would you like to hear about the available plans that could help you save on your healthcare costs?",
@@ -98,7 +98,7 @@ const exampleMasterCallFlow: CallFlow = {
       description: "Final mandatory exit point of the call.",
       audio_file: "exit.wav",
       wait_for_response: false,
-      text: "Goodbye.", // Minimal text, usually just hangs up.
+      text: "Goodbye.", 
       voice_settings: { stability: 0.5, similarity_boost: 0.75 }
     }
   }
@@ -130,11 +130,11 @@ export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
 ];
 
 export const MOCK_USERS: User[] = [
-  { id: "user-super-admin", email: "super@example.com", name: "Super Admin", role: "SUPER_ADMIN" },
-  { id: "user-cc-admin-1", email: "ccadmin1@example.com", name: "CC Admin (HQ)", role: "CALL_CENTER_ADMIN", assignedCallCenterIds: ["cc1"] },
-  { id: "user-cc-admin-2", email: "ccadmin2@example.com", name: "CC Admin (West + EMEA)", role: "CALL_CENTER_ADMIN", assignedCallCenterIds: ["cc2", "cc3"] },
-  { id: "user-design-admin-1", email: "design1@example.com", name: "Design Admin (HQ)", role: "DESIGN_ADMIN", assignedCallCenterIds: ["cc1"] },
-  { id: "user-design-admin-2", email: "design2@example.com", name: "Design Admin (West)", role: "DESIGN_ADMIN", assignedCallCenterIds: ["cc2"] },
+  { id: "user-super-admin", email: "super@example.com", name: "Super Admin", role: "SUPER_ADMIN", is2FAEnabled: true },
+  { id: "user-cc-admin-1", email: "ccadmin1@example.com", name: "CC Admin (HQ)", role: "CALL_CENTER_ADMIN", assignedCallCenterIds: ["cc1"], is2FAEnabled: false },
+  { id: "user-cc-admin-2", email: "ccadmin2@example.com", name: "CC Admin (West + EMEA)", role: "CALL_CENTER_ADMIN", assignedCallCenterIds: ["cc2", "cc3"], is2FAEnabled: true },
+  { id: "user-design-admin-1", email: "design1@example.com", name: "Design Admin (HQ)", role: "DESIGN_ADMIN", assignedCallCenterIds: ["cc1"], is2FAEnabled: false },
+  { id: "user-design-admin-2", email: "design2@example.com", name: "Design Admin (West)", role: "DESIGN_ADMIN", assignedCallCenterIds: ["cc2"], is2FAEnabled: false },
 ];
 
 const generateMockLineItems = (basePrice: number): InvoiceLineItem[] => {
@@ -174,23 +174,29 @@ export const MOCK_CAMPAIGNS: Campaign[] = [
 ];
 
 export const MOCK_VOICES: Voice[] = [
-  { id: "v1", name: "Ava - Friendly Female (CC1)", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 }, callCenterId: "cc1" },
-  { id: "v2", name: "John - Professional Male (CC1)", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 }, callCenterId: "cc1" },
-  { id: "v3", name: "Mia - Empathetic Female (CC2)", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 }, callCenterId: "cc2" },
+  { id: "v1", name: "Ava - Friendly Female (CC1)", provider: "ElevenLabs", settings: { stability: 0.7, clarity: 0.8 }, callCenterId: "cc1", backgroundNoise: "Cafe Ambience", backgroundNoiseVolume: 30 },
+  { id: "v2", name: "John - Professional Male (CC1)", provider: "GoogleTTS", settings: { pitch: -2, speed: 1.0 }, callCenterId: "cc1", backgroundNoise: "None" },
+  { id: "v3", name: "Mia - Empathetic Female (CC2)", provider: "ElevenLabs", settings: { stability: 0.6, clarity: 0.75, style_exaggeration: 0.2 }, callCenterId: "cc2", backgroundNoise: "Office Hum", backgroundNoiseVolume: 15 },
+  { id: "v4", name: "Noah - Calm Male (CC3)", provider: "CustomAPI", settings: { "voice-model": "calm-pro" }, callCenterId: "cc3", backgroundNoise: "Rainfall", backgroundNoiseVolume: 50 },
 ];
 
 export const MOCK_AGENTS: Agent[] = [
   { id: "agent1", name: "Medicare Agent Default (CC1)", campaignId: "c1", voiceId: "v1", callCenterId: "cc1" },
   { id: "agent2", name: "Product Feedback Agent (CC1)", campaignId: "c2", voiceId: "v2", callCenterId: "cc1" },
   { id: "agent3", name: "Solar Lead Gen Agent (CC2)", campaignId: "c3", voiceId: "v3", callCenterId: "cc2" },
+  { id: "agent4", name: "Support Agent EMEA (CC3)", campaignId: "c1", voiceId: "v4", callCenterId: "cc3"}, // Example agent for CC3
 ];
 
 export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
     const ccIds = ["cc1", "cc2", "cc3"];
     const currentCcId = ccIds[i % ccIds.length];
     const ccAgents = MOCK_AGENTS.filter(ag => ag.callCenterId === currentCcId);
-    const agent = ccAgents.length > 0 ? ccAgents[i % ccAgents.length] : MOCK_AGENTS[0]; // Fallback agent
-    const campaign = MOCK_CAMPAIGNS.find(c => c.id === agent.campaignId) || MOCK_CAMPAIGNS[0];
+    
+    // Ensure agent exists for the CC, otherwise pick any agent as a fallback
+    const agent = ccAgents.length > 0 ? ccAgents[i % ccAgents.length] : MOCK_AGENTS[i % MOCK_AGENTS.length]; 
+    
+    // Ensure campaign exists for the agent, otherwise pick any campaign as a fallback
+    const campaign = MOCK_CAMPAIGNS.find(c => c.id === agent.campaignId) || MOCK_CAMPAIGNS[i % MOCK_CAMPAIGNS.length];
 
     const totalCalls = Math.floor(Math.random() * 200) + 50;
     const successfulCalls = Math.floor(totalCalls * (Math.random() * 0.5 + 0.2));
