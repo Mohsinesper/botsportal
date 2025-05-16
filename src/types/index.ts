@@ -85,7 +85,7 @@ export interface Voice {
   id: string;
   name: string;
   provider?: string;
-  settings?: Record<string, any>;
+  settings?: Record<string, any>; // e.g. { "stability": 0.7, "clarity": 0.8 }
   callCenterId: string;
 }
 
@@ -208,4 +208,16 @@ export interface CampaignDropAnalysis {
   campaignName: string;
   totalInitialCalls: number;
   stepsAnalysis: CallFlowStepAnalysis[];
+}
+
+// New type for Audit Log Entries
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string; // ISO date string
+  userId: string;
+  userName: string; // Denormalized for display
+  action: string; // e.g., "User Login", "Campaign Created"
+  details?: string | Record<string, any>; // Can be a simple string or a structured object
+  ipAddress?: string;
+  location?: string; // e.g., "New York, USA" (mocked)
 }

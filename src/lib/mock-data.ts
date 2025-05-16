@@ -1,5 +1,5 @@
 
-import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow, CallLog, DNCRecord, CallResult } from "@/types";
+import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow, CallLog, DNCRecord, CallResult, AuditLogEntry } from "@/types";
 
 // Example Call Flow (Master)
 const exampleMasterCallFlow: CallFlow = {
@@ -318,4 +318,39 @@ MOCK_CALL_LOGS.forEach(log => {
             callCenterIdSource: log.callCenterId
         });
     }
+});
+
+// Mock Audit Log Data
+const auditLogActions = [
+  "User Login", "User Logout", "Viewed Dashboard", "Created Campaign", "Updated Campaign Status", 
+  "Generated Bots", "Updated Bot Status", "Viewed Call Logs", "Added User", "Edited User Permissions",
+  "Accessed Agent Optimization", "Generated Invoice", "Marked Invoice Paid", "Updated Call Center Billing"
+];
+const mockIpAddresses = ["192.168.1.10", "10.0.0.5", "172.16.0.20", "203.0.113.45", "198.51.100.12"];
+const mockLocations = ["New York, USA", "London, UK", "Tokyo, Japan", "Berlin, Germany", "Sydney, Australia"];
+
+export const MOCK_AUDIT_LOGS: AuditLogEntry[] = Array.from({ length: 50 }, (_, i) => {
+  const user = MOCK_USERS[i % MOCK_USERS.length];
+  const action = auditLogActions[i % auditLogActions.length];
+  let details: string | Record<string, any> = `Performed action: ${action}`;
+
+  if (action === "Created Campaign") {
+    details = { campaignName: MOCK_CAMPAIGNS[i % MOCK_CAMPAIGNS.length]?.name || `Campaign ${i}`, action: "create" };
+  } else if (action === "Updated Bot Status") {
+    details = { botName: MOCK_BOTS[i % MOCK_BOTS.length]?.name || `Bot ${i}`, newStatus: (["active", "inactive"] as Bot["status"][])[i%2] };
+  } else if (action === "User Login") {
+    details = "User successfully logged in.";
+  }
+
+
+  return {
+    id: `audit-${Date.now()}-${i}`,
+    timestamp: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(), // within last 30 days
+    userId: user.id,
+    userName: user.name || user.email,
+    action,
+    details,
+    ipAddress: mockIpAddresses[i % mockIpAddresses.length],
+    location: mockLocations[i % mockLocations.length],
+  };
 });

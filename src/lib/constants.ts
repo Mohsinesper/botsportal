@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase, Settings2, History, PieChart } from 'lucide-react';
+import { LayoutDashboard, Settings, Users, BarChart3, FileText, Megaphone, Cpu, ListChecks, Wand2, ClipboardList, Mic2, Building, UserCog, CreditCard, Briefcase, Settings2, History, PieChart, ListCollapse } from 'lucide-react';
 
 export type NavItem = {
   href: string;
@@ -50,7 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/agent-call-analysis',
     label: 'Agent Call Analysis',
-    icon: PieChart, // Or TrendingDown
+    icon: PieChart, 
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN", "DESIGN_ADMIN"],
   },
   {
@@ -70,6 +70,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Call Logs',
     icon: History, 
     roles: ["SUPER_ADMIN", "CALL_CENTER_ADMIN"],
+  },
+  {
+    href: '/audit-logs',
+    label: 'Audit Logs',
+    icon: ListCollapse, 
+    roles: ["SUPER_ADMIN"],
   },
   {
     href: '/accounting',
