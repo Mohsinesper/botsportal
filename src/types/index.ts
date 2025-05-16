@@ -220,4 +220,6 @@ export interface AuditLogEntry {
   details?: string | Record<string, any>; // Can be a simple string or a structured object
   ipAddress?: string;
   location?: string; // e.g., "New York, USA" (mocked)
+  callCenterId?: string; // Optional: ID of the call center context if applicable
+  callCenterName?: string; // Optional: Name of the call center context
 }

@@ -184,9 +184,9 @@ export const MOCK_SCRIPT_VARIANTS: ScriptVariant[] = [
 
 
 export const MOCK_CAMPAIGNS: Campaign[] = [
-    { id: "c1", name: "Medicare Outreach CC1", status: "active", targetAudience: "Seniors eligible for Medicare", callObjective: "Qualify for Medicare benefits and schedule follow-up.", createdDate: new Date().toISOString(), callCenterId: "cc1", conversionRate: 22.5, userMasterScript: "Hello, this is [Agent Name] from the Medicare department. I'm calling about your Medicare benefits. Do you have Medicare Part A and Part B?", callFlows: [exampleMasterCallFlow], scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c1') },
-    { id: "c2", name: "Product Feedback CC1", status: "paused", targetAudience: "Recent purchasers of Product X", callObjective: "Gather feedback on Product X.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), callCenterId: "cc1", conversionRate: 15.2, userMasterScript: "Hi, we're calling to get your feedback on your recent purchase of Product X. Do you have a few minutes?", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c2') },
-    { id: "c3", name: "Lead Gen Solar CC2", status: "draft", targetAudience: "Homeowners in sunny states", callObjective: "Generate leads for solar panel installations.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), callCenterId: "cc2", userMasterScript: "Hello, are you interested in saving money on your electricity bill with solar panels?", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c3') },
+    { id: "c1", callCenterId: "cc1", name: "Medicare Outreach CC1", status: "active", targetAudience: "Seniors eligible for Medicare", callObjective: "Qualify for Medicare benefits and schedule follow-up.", createdDate: new Date().toISOString(), conversionRate: 22.5, userMasterScript: "Hello, this is [Agent Name] from the Medicare department. I'm calling about your Medicare benefits. Do you have Medicare Part A and Part B?", callFlows: [exampleMasterCallFlow], scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c1') },
+    { id: "c2", callCenterId: "cc1", name: "Product Feedback CC1", status: "paused", targetAudience: "Recent purchasers of Product X", callObjective: "Gather feedback on Product X.", createdDate: new Date(Date.now() - 86400000 * 5).toISOString(), conversionRate: 15.2, userMasterScript: "Hi, we're calling to get your feedback on your recent purchase of Product X. Do you have a few minutes?", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c2') },
+    { id: "c3", callCenterId: "cc2", name: "Lead Gen Solar CC2", status: "draft", targetAudience: "Homeowners in sunny states", callObjective: "Generate leads for solar panel installations.", createdDate: new Date(Date.now() - 86400000 * 10).toISOString(), userMasterScript: "Hello, are you interested in saving money on your electricity bill with solar panels?", scriptVariants: MOCK_SCRIPT_VARIANTS.filter(sv => sv.campaignId === 'c3') },
 ];
 
 export const MOCK_VOICES: Voice[] = [
@@ -333,13 +333,24 @@ export const MOCK_AUDIT_LOGS: AuditLogEntry[] = Array.from({ length: 50 }, (_, i
   const user = MOCK_USERS[i % MOCK_USERS.length];
   const action = auditLogActions[i % auditLogActions.length];
   let details: string | Record<string, any> = `Performed action: ${action}`;
+  let callCenterContext: { id: string, name: string } | undefined = undefined;
+
+  if (action.toLowerCase().includes("campaign") || action.toLowerCase().includes("bot") || action.toLowerCase().includes("invoice") || action.toLowerCase().includes("billing") || action.toLowerCase().includes("agent")) {
+    if (MOCK_GLOBAL_CALL_CENTERS.length > 0) {
+      const cc = MOCK_GLOBAL_CALL_CENTERS[i % MOCK_GLOBAL_CALL_CENTERS.length];
+      callCenterContext = { id: cc.id, name: cc.name };
+    }
+  }
 
   if (action === "Created Campaign") {
-    details = { campaignName: MOCK_CAMPAIGNS[i % MOCK_CAMPAIGNS.length]?.name || `Campaign ${i}`, action: "create" };
+    details = { campaignName: MOCK_CAMPAIGNS[i % MOCK_CAMPAIGNS.length]?.name || `Campaign ${i}`, action: "create", callCenter: callCenterContext?.name };
   } else if (action === "Updated Bot Status") {
-    details = { botName: MOCK_BOTS[i % MOCK_BOTS.length]?.name || `Bot ${i}`, newStatus: (["active", "inactive"] as Bot["status"][])[i%2] };
+    details = { botName: MOCK_BOTS[i % MOCK_BOTS.length]?.name || `Bot ${i}`, newStatus: (["active", "inactive"] as Bot["status"][])[i%2], callCenter: callCenterContext?.name };
   } else if (action === "User Login") {
     details = "User successfully logged in.";
+  } else if (callCenterContext) {
+    // For other actions that might have a call center context
+    details = { action, context: `Call Center: ${callCenterContext.name}` };
   }
 
 
@@ -352,5 +363,7 @@ export const MOCK_AUDIT_LOGS: AuditLogEntry[] = Array.from({ length: 50 }, (_, i
     details,
     ipAddress: mockIpAddresses[i % mockIpAddresses.length],
     location: mockLocations[i % mockLocations.length],
+    callCenterId: callCenterContext?.id,
+    callCenterName: callCenterContext?.name,
   };
 });
