@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -9,22 +9,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, FilterX, Search, ClipboardCheck, Building } from "lucide-react";
+import { CalendarIcon, FilterX, Search, ClipboardCheck, Building, Loader2 } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCallCenter } from "@/contexts/CallCenterContext"; // Added import
-import { MOCK_AUDIT_LOGS } from "@/lib/mock-data";
-import type { AuditLogEntry, User } from "@/types";
+import { useCallCenter } from "@/contexts/CallCenterContext";
+import type { AuditLogEntry } from "@/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { getAuditLogs } from "@/services/audit-log-service"; // Import the service
 
 export default function AuditLogsPage() {
-  const { currentUser, users: allUsersForFilter, isLoading: authLoading } = useAuth(); // Renamed allUsers to allUsersForFilter
-  const { allCallCenters, isLoading: ccLoading } = useCallCenter(); // Get allCallCenters
+  const { currentUser, users: allUsersForFilter, isLoading: authLoading } = useAuth();
+  const { allCallCenters, isLoading: ccLoading } = useCallCenter();
   
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [allFetchedLogs, setAllFetchedLogs] = useState<AuditLogEntry[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
@@ -32,16 +32,26 @@ export default function AuditLogsPage() {
   const [filterActionTerm, setFilterActionTerm] = useState("");
   const [filterCallCenterIdAudit, setFilterCallCenterIdAudit] = useState<string | "all">("all");
 
+  const fetchLogs = useCallback(async () => {
+    setIsLoadingLogs(true);
+    // Pass basic filters to the service if implemented there, otherwise fetch all and filter client-side
+    const logs = await getAuditLogs({ 
+        filterUserId: filterUserId, 
+        filterCallCenterIdAudit: filterCallCenterIdAudit 
+        // Date range and text search might be more complex to implement purely server-side with basic Firestore queries
+    });
+    setAllFetchedLogs(logs);
+    setIsLoadingLogs(false);
+  }, [filterUserId, filterCallCenterIdAudit]); // Re-fetch if these primary db filters change
 
   useEffect(() => {
     if (!authLoading && !ccLoading) {
-      setAuditLogs(MOCK_AUDIT_LOGS);
-      setIsLoadingData(false);
+      fetchLogs();
     }
-  }, [authLoading, ccLoading]);
+  }, [authLoading, ccLoading, fetchLogs]);
 
   const filteredAuditLogs = useMemo(() => {
-    return auditLogs.filter(log => {
+    return allFetchedLogs.filter(log => {
       const logTimestamp = parseISO(log.timestamp);
       const matchesSearch = searchTerm === "" ||
                             log.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -52,13 +62,13 @@ export default function AuditLogsPage() {
                             (log.callCenterName && log.callCenterName.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesDate = !filterDateRange || !filterDateRange.from || 
                           (isValid(logTimestamp) && logTimestamp >= filterDateRange.from && (!filterDateRange.to || logTimestamp <= filterDateRange.to));
-      const matchesUser = filterUserId === "all" || log.userId === filterUserId;
+      // UserID and CallCenterID filtering is now primarily handled by the fetchLogs query if implemented there
+      // For client-side fallback or more specific text matching on action:
       const matchesAction = filterActionTerm === "" || log.action.toLowerCase().includes(filterActionTerm.toLowerCase());
-      const matchesCallCenter = filterCallCenterIdAudit === "all" || log.callCenterId === filterCallCenterIdAudit;
       
-      return matchesSearch && matchesDate && matchesUser && matchesAction && matchesCallCenter;
+      return matchesSearch && matchesDate && matchesAction;
     });
-  }, [auditLogs, searchTerm, filterDateRange, filterUserId, filterActionTerm, filterCallCenterIdAudit]);
+  }, [allFetchedLogs, searchTerm, filterDateRange, filterActionTerm]);
 
   const resetFilters = () => {
     setSearchTerm("");
@@ -66,7 +76,14 @@ export default function AuditLogsPage() {
     setFilterUserId("all");
     setFilterActionTerm("");
     setFilterCallCenterIdAudit("all");
+    // fetchLogs will be called due to filterUserId/filterCallCenterIdAudit change in state if they were not "all"
   };
+  
+  // Trigger re-fetch when primary dropdown filters change
+  useEffect(() => {
+    fetchLogs();
+  }, [filterUserId, filterCallCenterIdAudit, fetchLogs]);
+
 
   const renderDetails = (details: string | Record<string, any> | undefined) => {
     if (!details) return <span className="text-muted-foreground italic">N/A</span>;
@@ -74,7 +91,7 @@ export default function AuditLogsPage() {
     return <pre className="text-xs bg-muted p-2 rounded-md max-w-xs overflow-x-auto">{JSON.stringify(details, null, 2)}</pre>;
   };
 
-  if (isLoadingData || authLoading || ccLoading) {
+  if (authLoading || ccLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -99,24 +116,30 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center">
-        <ClipboardCheck className="h-8 w-8 mr-3 text-primary" />
-        <h2 className="text-3xl font-bold tracking-tight">Audit Logs</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+            <ClipboardCheck className="h-8 w-8 mr-3 text-primary" />
+            <h2 className="text-3xl font-bold tracking-tight">Audit Logs</h2>
+        </div>
+        <Button onClick={fetchLogs} variant="outline" size="sm" disabled={isLoadingLogs}>
+            {isLoadingLogs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Refresh Logs
+        </Button>
       </div>
 
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Filter Audit Logs</CardTitle>
-          <CardDescription>Showing {filteredAuditLogs.length} of {auditLogs.length} log entries.</CardDescription>
+          <CardDescription>Showing {filteredAuditLogs.length} of {allFetchedLogs.length} fetched log entries.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div>
-            <Label htmlFor="auditSearch">General Search</Label>
+            <Label htmlFor="auditSearch">General Search (Client-Side)</Label>
             <div className="relative mt-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input 
                 id="auditSearch" 
-                placeholder="User, Action, IP, Location, Details, Call Center..." 
+                placeholder="User, Action, IP, Details..." 
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
@@ -125,7 +148,7 @@ export default function AuditLogsPage() {
           </div>
           
           <div>
-            <Label htmlFor="filterUser">User</Label>
+            <Label htmlFor="filterUser">User (Server Filter)</Label>
             <Select value={filterUserId} onValueChange={setFilterUserId}>
               <SelectTrigger id="filterUser" className="mt-1"><SelectValue placeholder="Filter by User" /></SelectTrigger>
               <SelectContent>
@@ -136,7 +159,7 @@ export default function AuditLogsPage() {
           </div>
 
            <div>
-            <Label htmlFor="filterCallCenterAudit">Call Center</Label>
+            <Label htmlFor="filterCallCenterAudit">Call Center (Server Filter)</Label>
             <Select value={filterCallCenterIdAudit} onValueChange={setFilterCallCenterIdAudit}>
               <SelectTrigger id="filterCallCenterAudit" className="mt-1"><SelectValue placeholder="Filter by Call Center" /></SelectTrigger>
               <SelectContent>
@@ -148,7 +171,7 @@ export default function AuditLogsPage() {
           </div>
 
           <div>
-            <Label htmlFor="filterAction">Action Contains</Label>
+            <Label htmlFor="filterAction">Action Contains (Client-Side)</Label>
             <Input 
               id="filterAction" 
               placeholder="e.g., Created, Login" 
@@ -159,7 +182,7 @@ export default function AuditLogsPage() {
           </div>
 
           <div>
-            <Label>Date Range</Label>
+            <Label>Date Range (Client-Side)</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button id="auditDateRange" variant={"outline"} className={`w-full justify-start text-left font-normal mt-1 ${!filterDateRange && "text-muted-foreground"}`}>
@@ -172,7 +195,7 @@ export default function AuditLogsPage() {
               </PopoverContent>
             </Popover>
           </div>
-          <div className="lg:col-span-4 flex justify-end"> {/* Adjusted col-span for button */}
+          <div className="lg:col-span-4 flex justify-end">
             <Button onClick={resetFilters} variant="outline">
               <FilterX className="mr-2 h-4 w-4" /> Reset Filters
             </Button>
@@ -183,6 +206,12 @@ export default function AuditLogsPage() {
       <Card className="shadow-lg">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
+            {isLoadingLogs ? (
+                 <div className="flex items-center justify-center h-64">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="ml-2">Loading audit logs...</p>
+                 </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -210,13 +239,14 @@ export default function AuditLogsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center h-24"> {/* Adjusted colSpan */}
-                      {auditLogs.length === 0 ? "No audit logs found." : "No audit logs match your current filters."}
+                    <TableCell colSpan={7} className="text-center h-24">
+                      {allFetchedLogs.length === 0 ? "No audit logs found in the database." : "No audit logs match your current filters."}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            )}
           </div>
         </CardContent>
       </Card>

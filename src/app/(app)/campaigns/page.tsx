@@ -21,10 +21,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { handleGenerateCampaignScripts } from "./actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCallCenter } from "@/contexts/CallCenterContext";
+import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MOCK_CAMPAIGNS } from "@/lib/mock-data"; 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { addAuditLog } from "@/services/audit-log-service";
 
 
 const campaignSchemaBase = z.object({
@@ -32,8 +34,7 @@ const campaignSchemaBase = z.object({
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
   status: z.enum(["active", "paused", "archived", "draft"]),
   userMasterScript: z.string().min(20, "Master script text must be at least 20 characters."),
-  variantCount: z.coerce.number().int().min(0).max(5).default(1), // 0 means only master
-  // Optional fields, now primarily for metadata or AI guidance if not directly parsing structured script
+  variantCount: z.coerce.number().int().min(0).max(5).default(1), 
   targetAudience: z.string().optional(), 
   callObjective: z.string().optional(),
   tone: z.string().optional(),
@@ -43,6 +44,7 @@ type CampaignFormData = z.infer<typeof campaignSchemaBase>;
 
 export default function CampaignsPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
+  const { currentUser } = useAuth(); // Get current user for logging
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isCampaignFormOpen, setIsCampaignFormOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
@@ -63,8 +65,8 @@ export default function CampaignsPage() {
       status: "draft",
       userMasterScript: "",
       variantCount: 1,
-      targetAudience: "", // Provide default empty string
-      callObjective: "", // Provide default empty string
+      targetAudience: "", 
+      callObjective: "", 
       tone: "Professional",
     }
   });
@@ -94,8 +96,8 @@ export default function CampaignsPage() {
   };
 
   const handleCampaignFormSubmit = async (data: CampaignFormData) => {
-    if (!currentCallCenter) {
-      toast({ title: "Error", description: "No call center selected.", variant: "destructive" });
+    if (!currentCallCenter || !currentUser) {
+      toast({ title: "Error", description: "No call center selected or user not logged in.", variant: "destructive" });
       return;
     }
     setIsGeneratingScripts(true);
@@ -104,9 +106,10 @@ export default function CampaignsPage() {
     const scriptGenerationInput = {
       userMasterScript: data.userMasterScript,
       campaignName: data.name,
-      // Use optional callObjective for description, provide fallback
       campaignDescription: `Call flow for ${data.name}: ${data.callObjective || 'General campaign objective.'}`,
       variantCount: data.variantCount,
+      currentUserInfo: { id: currentUser.id, name: currentUser.name || currentUser.email, email: currentUser.email },
+      callCenterInfo: { id: currentCallCenter.id, name: currentCallCenter.name }
     };
 
     const scriptResult = await handleGenerateCampaignScripts(scriptGenerationInput);
@@ -124,8 +127,8 @@ export default function CampaignsPage() {
     const campaignDataToSave: Partial<Campaign> = {
       name: data.name,
       status: data.status,
-      targetAudience: data.targetAudience || "", // Ensure empty string if optional
-      callObjective: data.callObjective || "",   // Ensure empty string if optional
+      targetAudience: data.targetAudience || "", 
+      callObjective: data.callObjective || "",   
       tone: data.tone,
       id: campaignId,
       callCenterId: currentCallCenter.id,
@@ -137,6 +140,7 @@ export default function CampaignsPage() {
     };
     
     let savedCampaign: Campaign;
+    const actionType = editingCampaign ? "CAMPAIGN_UPDATED" : "CAMPAIGN_CREATED";
 
     if (editingCampaign) {
       savedCampaign = { ...editingCampaign, ...campaignDataToSave } as Campaign;
@@ -151,6 +155,15 @@ export default function CampaignsPage() {
       setCampaigns(prev => [...prev, savedCampaign]);
       toast({ title: "Campaign Created", description: `Campaign "${data.name}" created. Review scripts.`});
     }
+
+    addAuditLog({
+        action: actionType,
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: { campaignId: savedCampaign.id, campaignName: savedCampaign.name, status: savedCampaign.status }
+    });
     
     setIsGeneratingScripts(false);
     setIsCampaignFormOpen(false);
@@ -168,7 +181,7 @@ export default function CampaignsPage() {
       name: campaign.name,
       status: campaign.status,
       userMasterScript: campaign.userMasterScript || "",
-      variantCount: campaign.callFlows ? Math.max(0, campaign.callFlows.length - 1) : 1, // Default to 1 if no callFlows
+      variantCount: campaign.callFlows ? Math.max(0, campaign.callFlows.length - 1) : 1, 
       targetAudience: campaign.targetAudience || "",
       callObjective: campaign.callObjective || "",
       tone: campaign.tone || "Professional",
@@ -177,29 +190,63 @@ export default function CampaignsPage() {
   };
 
   const handleDeleteCampaign = (id: string) => {
+    const campaignToDelete = campaigns.find(c => c.id === id);
+    if (!campaignToDelete || !currentUser || !currentCallCenter) return;
+
     const index = MOCK_CAMPAIGNS.findIndex(c => c.id === id);
     if (index > -1) MOCK_CAMPAIGNS.splice(index, 1);
     setCampaigns(campaigns.filter(c => c.id !== id));
+    
+    addAuditLog({
+        action: "CAMPAIGN_DELETED",
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: { campaignId: id, campaignName: campaignToDelete.name }
+    });
     toast({ title: "Campaign Deleted", variant: "destructive" });
   };
   
   const handleChangeCampaignStatus = (id: string, status: Campaign["status"]) => {
+    if (!currentUser || !currentCallCenter) return;
+    const campaignToUpdate = campaigns.find(c => c.id === id);
+    if (!campaignToUpdate) return;
+
     const updatedCampaigns = MOCK_CAMPAIGNS.map(c => c.id === id ? { ...c, status } : c);
     MOCK_CAMPAIGNS.length = 0;
     MOCK_CAMPAIGNS.push(...updatedCampaigns);
     if (currentCallCenter) {
       setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
     }
+    
+    addAuditLog({
+        action: "CAMPAIGN_STATUS_CHANGED",
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: { campaignId: id, campaignName: campaignToUpdate.name, oldStatus: campaignToUpdate.status, newStatus: status }
+    });
     toast({ title: "Status Updated", description: `Campaign status changed to ${status}.`});
   };
   
   const handleSaveReviewedCallFlows = () => {
-    if (!campaignToReview || !editableCallFlows) return;
+    if (!campaignToReview || !editableCallFlows || !currentUser || !currentCallCenter) return;
 
     const campaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === campaignToReview.id);
     if (campaignIndex > -1) {
       MOCK_CAMPAIGNS[campaignIndex].callFlows = editableCallFlows;
       setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter?.id));
+      
+      addAuditLog({
+          action: "CAMPAIGN_CALL_FLOWS_UPDATED",
+          userId: currentUser.id,
+          userName: currentUser.name || currentUser.email,
+          callCenterId: currentCallCenter.id,
+          callCenterName: currentCallCenter.name,
+          details: { campaignId: campaignToReview.id, campaignName: campaignToReview.name, flowsCount: editableCallFlows.length }
+      });
       toast({ title: "Call Flows Updated", description: `Scripts for "${campaignToReview.name}" have been saved.` });
     }
     setIsReviewDialogOpen(false);
@@ -216,7 +263,6 @@ export default function CampaignsPage() {
       return updatedFlows;
     });
   };
-
 
   const statusBadgeVariant = (status: Campaign["status"]) => {
     switch (status) {
@@ -249,7 +295,6 @@ export default function CampaignsPage() {
       </div>
     );
   }
-
 
   return (
     <div className="space-y-6">

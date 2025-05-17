@@ -4,6 +4,7 @@
 import type { User, UserRole } from "@/types";
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { MOCK_USERS } from "@/lib/mock-data";
+import { addAuditLog } from "@/services/audit-log-service"; // Import the service
 
 interface AuthContextType {
   currentUser: User | null;
@@ -72,23 +73,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [users, isLoading]);
 
   const setCurrentUserById = (id: string | null) => {
+    let oldUser: User | null = null;
     if (id === null) {
+      oldUser = currentUser;
       setCurrentUser(null);
       try {
         localStorage.setItem(CURRENT_USER_ID_STORAGE_KEY, "null");
       } catch (error) {
-        console.error("Error saving current user ID to localStorage:", error);
+        console.error("Error clearing current user ID in localStorage:", error);
       }
-      return;
+    } else {
+        const userToSet = users.find(u => u.id === id);
+        if (userToSet) {
+            oldUser = currentUser;
+            setCurrentUser(userToSet);
+            try {
+                localStorage.setItem(CURRENT_USER_ID_STORAGE_KEY, id);
+            } catch (error) {
+                console.error("Error saving current user ID to localStorage:", error);
+            }
+        }
     }
-    const user = users.find(u => u.id === id);
-    if (user) {
-      setCurrentUser(user);
-      try {
-        localStorage.setItem(CURRENT_USER_ID_STORAGE_KEY, id);
-      } catch (error) {
-        console.error("Error saving current user ID to localStorage:", error);
-      }
+    // Log user switch / logout / login
+    if (oldUser && id === null) { // Logout
+        addAuditLog({
+            action: "USER_LOGOUT",
+            userId: oldUser.id,
+            userName: oldUser.name || oldUser.email,
+            details: { message: `User ${oldUser.name || oldUser.email} logged out (switched to no user).` }
+        });
+    } else if (id !== null && oldUser?.id !== id) { // Login or switch
+        const newUser = users.find(u => u.id === id);
+        if (newUser) {
+             addAuditLog({
+                action: "USER_LOGIN_SWITCH",
+                userId: newUser.id,
+                userName: newUser.name || newUser.email,
+                details: { message: `User switched to ${newUser.name || newUser.email}. Previous: ${oldUser ? (oldUser.name || oldUser.email) : 'None'}` }
+            });
+        }
     }
   };
 
@@ -109,15 +132,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       return updatedUsers;
     });
+
+    if (currentUser) { // Logged by the admin performing the action
+        addAuditLog({
+            action: "USER_CREATED",
+            userId: currentUser.id,
+            userName: currentUser.name || currentUser.email,
+            details: { createdUserId: newUser.id, createdUserName: newUser.name, createdUserEmail: newUser.email, role: newUser.role }
+        });
+    }
     return newUser;
   };
 
   const updateUser = (updatedUserData: User) => {
-    setUsers(prevUsers => 
-      prevUsers.map(user => user.id === updatedUserData.id ? updatedUserData : user)
-    );
+    let oldUserDetails: User | undefined;
+    setUsers(prevUsers => {
+        oldUserDetails = prevUsers.find(user => user.id === updatedUserData.id);
+        return prevUsers.map(user => user.id === updatedUserData.id ? updatedUserData : user);
+    });
     if (currentUser?.id === updatedUserData.id) {
       setCurrentUser(updatedUserData);
+    }
+
+    if (currentUser && oldUserDetails) { // Logged by the admin performing the action
+        const changes: Record<string, any> = {};
+        if (oldUserDetails.name !== updatedUserData.name) changes.name = { old: oldUserDetails.name, new: updatedUserData.name };
+        if (oldUserDetails.email !== updatedUserData.email) changes.email = { old: oldUserDetails.email, new: updatedUserData.email };
+        if (oldUserDetails.role !== updatedUserData.role) changes.role = { old: oldUserDetails.role, new: updatedUserData.role };
+        if (JSON.stringify(oldUserDetails.assignedCallCenterIds) !== JSON.stringify(updatedUserData.assignedCallCenterIds)) {
+            changes.assignedCallCenterIds = { old: oldUserDetails.assignedCallCenterIds, new: updatedUserData.assignedCallCenterIds };
+        }
+
+        addAuditLog({
+            action: "USER_UPDATED",
+            userId: currentUser.id,
+            userName: currentUser.name || currentUser.email,
+            details: { updatedUserId: updatedUserData.id, updatedUserName: updatedUserData.name, changes }
+        });
     }
   };
 
