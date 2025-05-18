@@ -21,21 +21,37 @@ console.log("Attempting to initialize Firebase with config:", {
 });
 
 if (!firebaseConfig.apiKey || typeof firebaseConfig.apiKey !== 'string') {
-  console.error(
-    "CRITICAL_FIREBASE_ERROR: Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is missing or not a string in your environment variables." +
-    " Please ensure it is correctly set in your .env.local file and that you have restarted your development server."
-  );
-} else if (firebaseConfig.apiKey.includes("YOUR_") || firebaseConfig.apiKey.includes("your_actual_") || firebaseConfig.apiKey.length < 10) {
-  console.warn(
-    "WARNING_FIREBASE_CONFIG: The Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) appears to be a placeholder value or is unusually short." +
-    " Please verify it's the correct key from your Firebase project settings in the Firebase Console."
-  );
+  const errorMessage = "CRITICAL_FIREBASE_ERROR: Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is missing or not a string in your environment variables. Please ensure it is correctly set in your .env.local file and that you have restarted your development server.";
+  console.error(errorMessage);
+  throw new Error(errorMessage); // Throw error to halt execution if key is critically missing
+}
+
+const placeholderPatterns = ["YOUR_", "your_actual_", "AIzaSyYOUR_ACTUAL_API_KEY_HERE"];
+const isPlaceholderKey = placeholderPatterns.some(pattern => firebaseConfig.apiKey!.includes(pattern)) || firebaseConfig.apiKey!.length < 10;
+
+if (isPlaceholderKey) {
+  const warningMessage = "WARNING_FIREBASE_CONFIG: The Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) appears to be a placeholder value or is unusually short. Please verify it's the correct key from your Firebase project settings in the Firebase Console.";
+  console.warn(warningMessage);
+  // Optionally, you could throw an error here too if you want to be very strict:
+  // throw new Error(warningMessage); 
 }
 
 // Initialize Firebase
-// We will let Firebase throw its own specific error if initialization fails after these checks.
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+let app;
+if (!getApps().length) {
+  try {
+    app = initializeApp(firebaseConfig);
+    console.log("Firebase app initialized successfully.");
+  } catch (error) {
+    console.error("CRITICAL_FIREBASE_ERROR: Firebase SDK initialization failed. This is often due to an invalid config (e.g., incorrect Project ID, Auth Domain). Error:", error);
+    throw error; 
+  }
+} else {
+  app = getApp();
+  console.log("Existing Firebase app retrieved.");
+}
+
 const db = getFirestore(app);
-const auth = getAuth(app);
+const auth = getAuth(app); // If this line throws auth/invalid-api-key, it means initializeApp succeeded but auth services specifically reject the key.
 
 export { app, db, auth };
