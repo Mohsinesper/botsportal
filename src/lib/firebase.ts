@@ -23,12 +23,13 @@ console.log("Attempting to initialize Firebase with config:", {
 if (!firebaseConfig.apiKey || typeof firebaseConfig.apiKey !== 'string') {
   const errorMessage = "CRITICAL_FIREBASE_ERROR: Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is missing or not a string in your environment variables. Please ensure it is correctly set in your .env.local file and that you have restarted your development server.";
   console.error(errorMessage);
-  // throw new Error(errorMessage); // Commented out to allow app to proceed further, but this is a critical issue.
+  throw new Error(errorMessage); // Throw error to halt execution if key is critically missing
 }
 
 const placeholderPatterns = ["YOUR_", "your_actual_", "AIzaSyYOUR_ACTUAL_API_KEY_HERE"];
 let isPlaceholderKey = false;
 
+// Ensure apiKey is a string before using string methods
 if (firebaseConfig.apiKey && typeof firebaseConfig.apiKey === 'string') {
   isPlaceholderKey = placeholderPatterns.some(pattern => firebaseConfig.apiKey.includes(pattern)) || firebaseConfig.apiKey.length < 10;
 }
@@ -49,7 +50,7 @@ if (!getApps().length) {
     console.log("Firebase app initialized successfully.");
   } catch (error) {
     console.error("CRITICAL_FIREBASE_ERROR: Firebase SDK initialization failed. This is often due to an invalid config (e.g., incorrect Project ID, Auth Domain). Error:", error);
-    // If the critical error for missing key was commented out, this catch block might be hit due to invalid config.
+    // If the critical error for missing key was handled above, this catch block might be hit due to other invalid config issues.
     throw error; 
   }
 } else {
