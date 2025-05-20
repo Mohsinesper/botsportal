@@ -17,11 +17,11 @@ export interface CallCenter {
   id: string;
   name: string;
   location?: string;
-  status?: "active" | "inactive"; 
+  status?: "active" | "inactive";
   billingConfig?: {
     rateType: BillingRateType;
-    amount: number; 
-    currency: "USD" | "EUR" | "GBP"; 
+    amount: number;
+    currency: "USD" | "EUR" | "GBP";
   };
 }
 
@@ -67,18 +67,18 @@ export interface Campaign {
   id: string;
   name: string;
   status: "active" | "paused" | "archived" | "draft";
-  targetAudience?: string; 
-  callObjective?: string;  
+  targetAudience?: string;
+  callObjective?: string;
   createdDate: string;
   callCenterId: string;
   conversionRate?: number;
-  
-  userMasterScript?: string; 
-  callFlows?: CallFlow[];    
 
-  masterScript?: string; 
-  scriptVariants?: ScriptVariant[]; 
-  tone?: string; 
+  userMasterScript?: string;
+  callFlows?: CallFlow[];
+
+  masterScript?: string;
+  scriptVariants?: ScriptVariant[];
+  tone?: string;
 }
 
 export interface Voice {
@@ -92,11 +92,11 @@ export interface Voice {
 export interface Agent {
   id: string;
   name: string;
-  campaignId: string; 
-  scriptVariantId?: string; 
+  campaignId: string;
+  scriptVariantId?: string;
   voiceId: string;
-  backgroundNoise?: string; 
-  backgroundNoiseVolume?: number; 
+  backgroundNoise?: string;
+  backgroundNoiseVolume?: number;
   callCenterId: string;
   performanceMetric?: number;
 }
@@ -105,7 +105,7 @@ export interface Bot {
   id: string;
   name: string;
   campaignId: string;
-  agentId: string; 
+  agentId: string;
   status: "active" | "inactive" | "error";
   creationDate: string;
   callCenterId: string;
@@ -118,7 +118,7 @@ export interface Bot {
   activeDutyEndTime?: string;   // e.g., "17:00"
 }
 
-export interface Script { 
+export interface Script {
   id: string;
   name: string;
   content: string;
@@ -142,9 +142,11 @@ export interface Invoice {
   invoiceNumber: string;
   issueDate: string; // ISO string
   dueDate: string;   // ISO string
+  billingPeriodStart?: string; // ISO string, e.g., "2024-08-01T00:00:00.000Z"
+  billingPeriodEnd?: string;   // ISO string, e.g., "2024-08-31T23:59:59.999Z"
   items: InvoiceLineItem[];
   subtotal: number;
-  taxRate?: number; 
+  taxRate?: number;
   taxAmount?: number;
   total: number;
   status: InvoiceStatus;
@@ -153,7 +155,7 @@ export interface Invoice {
 }
 
 // New Types for Call Logs and DNC
-export type CallResult = 
+export type CallResult =
   | "answered_success" // Lead answered, positive outcome from script
   | "answered_dnc_requested" // Lead answered, requested DNC
   | "answered_declined" // Lead answered, declined offer/service

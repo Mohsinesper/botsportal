@@ -9,16 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DollarSign, FileText, AlertTriangle, CheckCircle2, Edit, PlusCircle, CalendarIcon, Settings, FilterX, Search } from "lucide-react";
+import { DollarSign, FileText, AlertTriangle, Edit, PlusCircle, CalendarIcon, Settings, FilterX, Search, MoreHorizontal, FileEdit, Ban, CheckCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { getAllInvoices, updateInvoiceStatus, generateNewInvoice } from "@/lib/accounting-mock";
+import { getAllInvoices, updateInvoiceStatus, generateNewInvoice, updateInvoiceDetails, getInvoiceById } from "@/lib/accounting-mock";
 import type { Invoice, CallCenter, BillingRateType, InvoiceStatus } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { format, parseISO, isValid, startOfMonth, endOfMonth } from 'date-fns';
@@ -44,15 +45,26 @@ const generateInvoiceSchema = z.object({
 });
 type GenerateInvoiceFormData = z.infer<typeof generateInvoiceSchema>;
 
+const editInvoiceSchema = z.object({
+  invoiceId: z.string(),
+  // issueDate: z.date({ required_error: "Issue date is required." }), // For now, issue date (and thus period) is not editable
+  dueDate: z.date({ required_error: "Due date is required." }),
+  notes: z.string().optional(),
+});
+type EditInvoiceFormData = z.infer<typeof editInvoiceSchema>;
+
 export default function AccountingPage() {
   const { currentUser, isLoading: authLoading } = useAuth();
   const { allCallCenters, updateCallCenterBillingConfig, isLoading: ccLoading } = useCallCenter();
-  
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isRateDialogOpen, setIsRateDialogOpen] = useState(false);
   const [editingRateCallCenter, setEditingRateCallCenter] = useState<CallCenter | null>(null);
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+  const [isEditInvoiceDialogOpen, setIsEditInvoiceDialogOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+
 
   // Filters for Invoice Management
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "all" | "overdue">("all");
@@ -73,13 +85,17 @@ export default function AccountingPage() {
     resolver: zodResolver(generateInvoiceSchema),
   });
 
+  const editInvoiceForm = useForm<EditInvoiceFormData>({
+    resolver: zodResolver(editInvoiceSchema),
+  });
+
   useEffect(() => {
     if (!authLoading && !ccLoading) {
       setInvoices(getAllInvoices());
       setIsLoadingData(false);
     }
   }, [authLoading, ccLoading]);
-  
+
   useEffect(() => {
     if (editingRateCallCenter?.billingConfig) {
       rateForm.reset(editingRateCallCenter.billingConfig);
@@ -87,6 +103,18 @@ export default function AccountingPage() {
       rateForm.reset({ rateType: "per_month", amount: 0, currency: "USD" });
     }
   }, [editingRateCallCenter, rateForm]);
+
+  useEffect(() => {
+    if (editingInvoice) {
+        editInvoiceForm.reset({
+            invoiceId: editingInvoice.id,
+            // issueDate: parseISO(editingInvoice.issueDate),
+            dueDate: parseISO(editingInvoice.dueDate),
+            notes: editingInvoice.notes || "",
+        });
+    }
+  }, [editingInvoice, editInvoiceForm]);
+
 
   const handleOpenRateDialog = (callCenter: CallCenter) => {
     setEditingRateCallCenter(callCenter);
@@ -111,17 +139,35 @@ export default function AccountingPage() {
       toast({ title: "Invoice Generation Failed", description: result.error, variant: "destructive" });
     } else {
       toast({ title: "Invoice Generated", description: `Invoice ${result.invoiceNumber} created.` });
-      setInvoices(getAllInvoices()); 
+      setInvoices(getAllInvoices());
     }
     setIsInvoiceFormOpen(false);
     invoiceForm.reset();
   };
 
-  const handleMarkAsPaid = (invoiceId: string) => {
-    updateInvoiceStatus(invoiceId, "paid");
-    setInvoices(getAllInvoices()); 
-    toast({ title: "Invoice Updated", description: `Invoice marked as paid.` });
+  const handleUpdateInvoiceStatus = (invoiceId: string, status: InvoiceStatus) => {
+    updateInvoiceStatus(invoiceId, status);
+    setInvoices(getAllInvoices());
+    toast({ title: "Invoice Updated", description: `Invoice status changed to ${status}.` });
   };
+
+  const handleOpenEditInvoiceDialog = (invoice: Invoice) => {
+    setEditingInvoice(invoice);
+    setIsEditInvoiceDialogOpen(true);
+  };
+
+  const handleEditInvoiceSubmit = (data: EditInvoiceFormData) => {
+    const updated = updateInvoiceDetails(data.invoiceId, data.dueDate, data.notes);
+    if (updated) {
+        setInvoices(getAllInvoices());
+        toast({ title: "Invoice Updated", description: `Invoice ${updated.invoiceNumber} details saved.`});
+    } else {
+        toast({ title: "Error", description: "Failed to update invoice details.", variant: "destructive" });
+    }
+    setIsEditInvoiceDialogOpen(false);
+    setEditingInvoice(null);
+  };
+
 
   const isOverdue = (invoice: Invoice): boolean => {
     try {
@@ -134,9 +180,9 @@ export default function AccountingPage() {
       const invoiceIssueDate = parseISO(inv.issueDate);
       const matchesStatus = filterStatus === "all" || inv.status === filterStatus || (filterStatus === "overdue" && isOverdue(inv));
       const matchesCallCenter = filterCallCenterId === "all" || inv.callCenterId === filterCallCenterId;
-      const matchesDate = !filterDateRange || !filterDateRange.from || !filterDateRange.to || 
+      const matchesDate = !filterDateRange || !filterDateRange.from || !filterDateRange.to ||
                           (isValid(invoiceIssueDate) && invoiceIssueDate >= filterDateRange.from && invoiceIssueDate <= filterDateRange.to);
-      const matchesSearch = searchTermInvoices === "" || 
+      const matchesSearch = searchTermInvoices === "" ||
                             inv.invoiceNumber.toLowerCase().includes(searchTermInvoices.toLowerCase()) ||
                             (allCallCenters.find(cc => cc.id === inv.callCenterId)?.name.toLowerCase().includes(searchTermInvoices.toLowerCase())) ||
                             (inv.notes && inv.notes.toLowerCase().includes(searchTermInvoices.toLowerCase()));
@@ -146,7 +192,7 @@ export default function AccountingPage() {
 
   const filteredCallCentersForRateManagement = useMemo(() => {
     if (!rateManagementSearchTerm) return allCallCenters;
-    return allCallCenters.filter(cc => 
+    return allCallCenters.filter(cc =>
       cc.name.toLowerCase().includes(rateManagementSearchTerm.toLowerCase())
     );
   }, [allCallCenters, rateManagementSearchTerm]);
@@ -157,7 +203,7 @@ export default function AccountingPage() {
     pendingInvoicesCount: filteredInvoices.filter(i => i.status === 'pending' && !isOverdue(i)).length,
     overdueInvoicesCount: filteredInvoices.filter(isOverdue).length,
   };
-  
+
   const invoiceStatusChartData = [
     { name: 'Paid', count: filteredInvoices.filter(i => i.status === 'paid').length },
     { name: 'Pending', count: summary.pendingInvoicesCount },
@@ -199,7 +245,7 @@ export default function AccountingPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-3xl font-bold tracking-tight">Accounting Dashboard</h2>
-      
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -333,10 +379,10 @@ export default function AccountingPage() {
                     <Label htmlFor="invoiceSearch">Search Invoices</Label>
                     <div className="relative">
                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                       <Input 
+                       <Input
                         id="invoiceSearch"
-                        placeholder="Invoice #, CC Name, Notes..." 
-                        value={searchTermInvoices} 
+                        placeholder="Invoice #, CC Name, Notes..."
+                        value={searchTermInvoices}
                         onChange={(e) => setSearchTermInvoices(e.target.value)}
                         className="pl-9"
                         />
@@ -406,8 +452,10 @@ export default function AccountingPage() {
                     <TableHead>Call Center</TableHead>
                     <TableHead>Issue Date</TableHead>
                     <TableHead>Due Date</TableHead>
+                    <TableHead>Billing Period</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Paid Date</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -418,12 +466,17 @@ export default function AccountingPage() {
                       <TableCell>{allCallCenters.find(cc => cc.id === inv.callCenterId)?.name || 'Unknown CC'}</TableCell>
                       <TableCell>{format(parseISO(inv.issueDate), "MMM d, yyyy")}</TableCell>
                       <TableCell>{format(parseISO(inv.dueDate), "MMM d, yyyy")}</TableCell>
+                      <TableCell>
+                        {inv.billingPeriodStart && inv.billingPeriodEnd ?
+                          `${format(parseISO(inv.billingPeriodStart), "MMM d, yyyy")} - ${format(parseISO(inv.billingPeriodEnd), "MMM d, yyyy")}`
+                          : "N/A"}
+                      </TableCell>
                       <TableCell>${inv.total.toFixed(2)}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
-                          inv.status === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-300' : 
-                          inv.status === 'pending' && !isOverdue(inv) ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-300' : 
-                          isOverdue(inv) ? 'bg-red-100 text-red-700 dark:bg-red-700/30 dark:text-red-300' : 
+                          inv.status === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-300' :
+                          inv.status === 'pending' && !isOverdue(inv) ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-300' :
+                          isOverdue(inv) ? 'bg-red-100 text-red-700 dark:bg-red-700/30 dark:text-red-300' :
                           inv.status === 'draft' ? 'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-300' :
                           inv.status === 'cancelled' ? 'bg-slate-100 text-slate-700 dark:bg-slate-700/30 dark:text-slate-300' :
                           'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-300'
@@ -431,18 +484,42 @@ export default function AccountingPage() {
                           {isOverdue(inv) && inv.status !== 'paid' && inv.status !== 'cancelled' ? 'Overdue' : inv.status}
                         </span>
                       </TableCell>
+                      <TableCell>
+                        {inv.paidDate ? format(parseISO(inv.paidDate), "MMM d, yyyy") : inv.status === 'paid' ? 'Pending Record' : 'N/A'}
+                      </TableCell>
                       <TableCell className="text-right">
-                        {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                          <Button variant="outline" size="sm" onClick={() => handleMarkAsPaid(inv.id)}>
-                            Mark Paid
-                          </Button>
-                        )}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                                    <DropdownMenuItem onClick={() => handleUpdateInvoiceStatus(inv.id, 'paid')}>
+                                        <CheckCircle className="mr-2 h-4 w-4" /> Mark Paid
+                                    </DropdownMenuItem>
+                                )}
+                                {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                                    <DropdownMenuItem onClick={() => handleOpenEditInvoiceDialog(inv)}>
+                                        <FileEdit className="mr-2 h-4 w-4" /> Edit Invoice
+                                    </DropdownMenuItem>
+                                )}
+                                {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => handleUpdateInvoiceStatus(inv.id, 'cancelled')} className="text-destructive focus:text-destructive">
+                                            <Ban className="mr-2 h-4 w-4" /> Cancel Invoice
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                                 { (inv.status === 'paid' || inv.status === 'cancelled') && <DropdownMenuItem disabled>No actions available</DropdownMenuItem>}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
                    {filteredInvoices.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={7} className="text-center h-24">
+                        <TableCell colSpan={9} className="text-center h-24">
                             {invoices.length === 0 ? "No invoices found." : "No invoices match your current filters."}
                         </TableCell>
                     </TableRow>
@@ -538,7 +615,7 @@ export default function AccountingPage() {
                {invoiceForm.formState.errors.callCenterId && <p className="text-sm text-destructive mt-1">{invoiceForm.formState.errors.callCenterId.message}</p>}
             </div>
             <div>
-                <Label htmlFor="issueDateInv">Issue Date</Label>
+                <Label htmlFor="issueDateInv">Issue Date (Determines Billing Month)</Label>
                 <Controller
                     name="issueDate"
                     control={invoiceForm.control}
@@ -590,9 +667,52 @@ export default function AccountingPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+       <Dialog open={isEditInvoiceDialogOpen} onOpenChange={setIsEditInvoiceDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Invoice: {editingInvoice?.invoiceNumber}</DialogTitle>
+            <DialogDescription>
+              Call Center: {allCallCenters.find(cc => cc.id === editingInvoice?.callCenterId)?.name || "N/A"} <br/>
+              Billing Period: {editingInvoice?.billingPeriodStart && editingInvoice?.billingPeriodEnd ?
+                `${format(parseISO(editingInvoice.billingPeriodStart), "MMM d, yyyy")} - ${format(parseISO(editingInvoice.billingPeriodEnd), "MMM d, yyyy")}`
+                : "N/A"}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={editInvoiceForm.handleSubmit(handleEditInvoiceSubmit)} className="space-y-4">
+            <Input type="hidden" {...editInvoiceForm.register("invoiceId")} />
+             <div>
+                <Label htmlFor="editDueDateInv">Due Date</Label>
+                 <Controller
+                    name="dueDate"
+                    control={editInvoiceForm.control}
+                    render={({ field }) => (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button id="editDueDateInv" variant={"outline"} className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                />
+                {editInvoiceForm.formState.errors.dueDate && <p className="text-sm text-destructive mt-1">{editInvoiceForm.formState.errors.dueDate.message}</p>}
+            </div>
+            <div>
+                <Label htmlFor="editNotesInv">Notes (Optional)</Label>
+                <Textarea id="editNotesInv" {...editInvoiceForm.register("notes")} placeholder="Any additional notes for the invoice..."/>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditInvoiceDialogOpen(false)}>Cancel</Button>
+              <Button type="submit">Save Changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-
-    

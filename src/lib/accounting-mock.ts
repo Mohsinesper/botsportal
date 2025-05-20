@@ -1,7 +1,7 @@
 
 import { MOCK_INVOICES as initialInvoices, MOCK_GLOBAL_CALL_CENTERS } from './mock-data';
 import type { Invoice, InvoiceStatus, CallCenter, BillingRateType, InvoiceLineItem } from '@/types';
-import { format, getMonth, getYear, startOfMonth, endOfDay, differenceInCalendarDays } from 'date-fns';
+import { format, getMonth, getYear, startOfMonth, endOfMonth, endOfDay, differenceInCalendarDays, parseISO } from 'date-fns';
 
 let invoices: Invoice[] = [...initialInvoices]; // Make a mutable copy
 
@@ -23,13 +23,30 @@ export const updateInvoiceStatus = (invoiceId: string, status: InvoiceStatus): I
     invoices[invoiceIndex].status = status;
     if (status === 'paid') {
       invoices[invoiceIndex].paidDate = new Date().toISOString();
+    } else if (status === 'cancelled') {
+      // If cancelled, ensure paidDate is removed if it was somehow set.
+      invoices[invoiceIndex].paidDate = undefined;
     } else {
+      // For other statuses like pending, draft, overdue, ensure paidDate is not set
       invoices[invoiceIndex].paidDate = undefined;
     }
     return invoices[invoiceIndex];
   }
   return undefined;
 };
+
+export const updateInvoiceDetails = (invoiceId: string, newDueDate: Date, newNotes?: string): Invoice | undefined => {
+    const invoiceIndex = invoices.findIndex(inv => inv.id === invoiceId);
+    if (invoiceIndex > -1) {
+        invoices[invoiceIndex].dueDate = newDueDate.toISOString();
+        invoices[invoiceIndex].notes = newNotes;
+        // Potentially re-evaluate status if due date changes (e.g. no longer overdue)
+        // For simplicity in mock, this is not automatically done here. The 'isOverdue' check will handle it.
+        return invoices[invoiceIndex];
+    }
+    return undefined;
+};
+
 
 // Simplified mock usage calculation
 const calculateMockUsage = (callCenter: CallCenter, periodStart: Date, periodEnd: Date): InvoiceLineItem[] => {
@@ -42,7 +59,7 @@ const calculateMockUsage = (callCenter: CallCenter, periodStart: Date, periodEnd
   let description = "";
   // Calculate days in period, ensuring it's at least 1
   const daysInPeriod = Math.max(1, differenceInCalendarDays(endOfDay(periodEnd), startOfMonth(periodStart)) + 1);
-  const periodFormatted = format(periodStart, "MMMM yyyy");
+  const periodFormatted = `${format(periodStart, "MMM d, yyyy")} - ${format(periodEnd, "MMM d, yyyy")}`;
 
 
   switch (billingConfig.rateType) {
@@ -60,7 +77,7 @@ const calculateMockUsage = (callCenter: CallCenter, periodStart: Date, periodEnd
       break;
     case "per_month":
       // Assuming period is roughly a month for simplicity
-      quantity = mockBotCount; 
+      quantity = mockBotCount;
       description = `Monthly Service Fee for ${mockBotCount} Bots (${billingConfig.amount} ${billingConfig.currency}/bot) for ${periodFormatted}`;
       break;
     default:
@@ -92,31 +109,33 @@ export const generateNewInvoice = (callCenterId: string, issueDate: Date, dueDat
   const issueMonth = getMonth(issueDate);
   const issueYear = getYear(issueDate);
 
+  const billingPeriodStart = startOfMonth(issueDate);
+  const billingPeriodEnd = endOfMonth(issueDate);
+
   const existingInvoiceForPeriod = invoices.find(inv => {
     if (inv.callCenterId !== callCenterId) return false;
-    const existingIssueDate = new Date(inv.issueDate);
-    return getMonth(existingIssueDate) === issueMonth && getYear(existingIssueDate) === issueYear;
+    if (!inv.billingPeriodStart) return false; // Skip if old invoice doesn't have period
+    const invPeriodStart = parseISO(inv.billingPeriodStart);
+    return getMonth(invPeriodStart) === issueMonth && getYear(invPeriodStart) === issueYear;
   });
 
   if (existingInvoiceForPeriod) {
-    return { error: `An invoice for ${format(issueDate, "MMMM yyyy")} already exists for ${callCenter.name}. Invoice #: ${existingInvoiceForPeriod.invoiceNumber}` };
+    return { error: `An invoice for ${format(billingPeriodStart, "MMMM yyyy")} already exists for ${callCenter.name}. Invoice #: ${existingInvoiceForPeriod.invoiceNumber}` };
   }
 
-  const periodStart = startOfMonth(issueDate);
-  const periodEnd = endOfDay(new Date(issueYear, issueMonth + 1, 0)); // Last day of the issue month
 
-
-  const items = calculateMockUsage(callCenter, periodStart, periodEnd); 
+  const items = calculateMockUsage(callCenter, billingPeriodStart, billingPeriodEnd);
   if (items.length === 0) return { error: "Could not calculate usage for invoice."};
-  
+
   const { subtotal, taxAmount, total } = calculateTotals(items);
 
-  const invoicesForMonthAndYear = invoices.filter(inv => 
-    inv.callCenterId === callCenterId && 
-    getYear(new Date(inv.issueDate)) === issueYear &&
-    getMonth(new Date(inv.issueDate)) === issueMonth
+  const invoicesForMonthAndYear = invoices.filter(inv =>
+    inv.callCenterId === callCenterId &&
+    inv.billingPeriodStart &&
+    getYear(parseISO(inv.billingPeriodStart)) === issueYear &&
+    getMonth(parseISO(inv.billingPeriodStart)) === issueMonth
   ).length;
-  const sequentialNumber = String(invoicesForMonthAndYear + 1).padStart(3, '0'); // Pad to 3 digits e.g., 001
+  const sequentialNumber = String(invoicesForMonthAndYear + 1).padStart(3, '0');
 
   const newInvoice: Invoice = {
     id: `inv-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
@@ -124,6 +143,8 @@ export const generateNewInvoice = (callCenterId: string, issueDate: Date, dueDat
     invoiceNumber: `INV-${issueYear}-${String(issueMonth + 1).padStart(2, '0')}-${sequentialNumber}`,
     issueDate: issueDate.toISOString(),
     dueDate: dueDate.toISOString(),
+    billingPeriodStart: billingPeriodStart.toISOString(),
+    billingPeriodEnd: billingPeriodEnd.toISOString(),
     items,
     subtotal,
     taxRate: 0.05,
@@ -138,14 +159,12 @@ export const generateNewInvoice = (callCenterId: string, issueDate: Date, dueDat
 
 // Function to update billing config for a call center (mock)
 export const updateCallCenterBillingConfigInMock = (
-  callCenterId: string, 
+  callCenterId: string,
   config: CallCenter['billingConfig']
 ): CallCenter | undefined => {
   const ccIndex = MOCK_GLOBAL_CALL_CENTERS.findIndex(cc => cc.id === callCenterId);
   if (ccIndex > -1) {
     MOCK_GLOBAL_CALL_CENTERS[ccIndex].billingConfig = config;
-    // In a real app, this would also update the CallCenterContext's source of truth
-    // For this mock setup, CallCenterContext will re-fetch or use this mock data.
     return MOCK_GLOBAL_CALL_CENTERS[ccIndex];
   }
   return undefined;

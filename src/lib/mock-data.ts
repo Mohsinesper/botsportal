@@ -1,5 +1,6 @@
 
 import type { CallCenter, User, UserRole, Invoice, InvoiceLineItem, InvoiceStatus, BillingRateType, Campaign, ScriptVariant, Voice, Agent, Bot, CallFlow, CallLog, DNCRecord, CallResult, AuditLogEntry } from "@/types";
+import { format, getMonth, getYear, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 // Example Call Flow (Master)
 const exampleMasterCallFlow: CallFlow = {
@@ -32,7 +33,7 @@ const exampleMasterCallFlow: CallFlow = {
     "qualification_confirmed_step": {
       description: "Customer confirms they have Part A and B.",
       audio_file: "qualify.wav",
-      wait_for_response: false, 
+      wait_for_response: false,
       next: "offer_program_step",
       text: "That's great! Since you have Medicare Part A and Part B, you may qualify for our benefits program.",
       voice_settings: { stability: 0.5, similarity_boost: 0.75 }
@@ -43,7 +44,7 @@ const exampleMasterCallFlow: CallFlow = {
       wait_for_response: true,
       timeout: 10,
       conditions: [
-        { type: "contains", keywords: ["yes", "okay", "sure", "tell me more"], next: "transfer_to_agent_step" }, 
+        { type: "contains", keywords: ["yes", "okay", "sure", "tell me more"], next: "transfer_to_agent_step" },
         { type: "default", next: "graceful_exit_step" }
       ],
       text: "Would you like to hear about the available plans that could help you save on your healthcare costs?",
@@ -98,7 +99,7 @@ const exampleMasterCallFlow: CallFlow = {
       description: "Final mandatory exit point of the call.",
       audio_file: "exit.wav",
       wait_for_response: false,
-      text: "Goodbye.", 
+      text: "Goodbye.",
       voice_settings: { stability: 0.5, similarity_boost: 0.75 }
     }
   }
@@ -115,23 +116,23 @@ export const AVAILABLE_BACKGROUND_NOISES = [
 
 
 export const MOCK_GLOBAL_CALL_CENTERS: CallCenter[] = [
-  { 
-    id: "cc1", 
-    name: "Main Call Center HQ", 
+  {
+    id: "cc1",
+    name: "Main Call Center HQ",
     location: "New York",
     status: "active",
     billingConfig: { rateType: "per_month", amount: 5, currency: "USD" }
   },
-  { 
-    id: "cc2", 
-    name: "West Coast Operations", 
+  {
+    id: "cc2",
+    name: "West Coast Operations",
     location: "California",
     status: "active",
     billingConfig: { rateType: "per_call", amount: 0.02, currency: "USD" }
   },
-  { 
-    id: "cc3", 
-    name: "EMEA Support Hub", 
+  {
+    id: "cc3",
+    name: "EMEA Support Hub",
     location: "London",
     status: "inactive",
     billingConfig: { rateType: "per_hour", amount: 0.5, currency: "USD" }
@@ -146,33 +147,67 @@ export const MOCK_USERS: User[] = [
   { id: "user-design-admin-2", email: "design2@example.com", name: "Design Admin (West)", role: "DESIGN_ADMIN", assignedCallCenterIds: ["cc2"], is2FAEnabled: false },
 ];
 
-const generateMockLineItems = (basePrice: number): InvoiceLineItem[] => {
-  const quantity = Math.floor(Math.random() * 50) + 100; 
+const generateMockLineItems = (basePrice: number, periodDesc: string): InvoiceLineItem[] => {
+  const quantity = Math.floor(Math.random() * 50) + 100;
   const unitPrice = basePrice;
-  return [{ id: `li-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, description: "Bot Usage Charges (Mocked)", quantity, unitPrice, totalPrice: quantity * unitPrice }];
+  return [{ id: `li-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, description: `Bot Usage Charges for ${periodDesc}`, quantity, unitPrice, totalPrice: quantity * unitPrice }];
 };
 
-const calculateTotals = (items: InvoiceLineItem[], taxRate: number = 0.05) => {
+const calculateInvoiceTotals = (items: InvoiceLineItem[], taxRate: number = 0.05) => {
   const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
   const taxAmount = subtotal * taxRate;
   const total = subtotal + taxAmount;
   return { subtotal, taxAmount, total };
 };
 
-const createInvoice = (id: string, callCenterId: string, invoiceNumber: string, issueDate: Date, dueDate: Date, status: InvoiceStatus, baseLineItemPrice: number, notes?: string): Invoice => {
-  const items = generateMockLineItems(baseLineItemPrice);
-  const { subtotal, taxAmount, total } = calculateTotals(items);
-  return { id, callCenterId, invoiceNumber, issueDate: issueDate.toISOString(), dueDate: dueDate.toISOString(), items, subtotal, taxRate: 0.05, taxAmount, total, status, paidDate: status === "paid" ? new Date(issueDate.getTime() + Math.random() * (dueDate.getTime() - issueDate.getTime())).toISOString() : undefined, notes };
+const createInvoice = (
+  id: string,
+  callCenterId: string,
+  invoiceNumber: string,
+  issueDate: Date, // This date determines the billing period
+  dueDate: Date,
+  status: InvoiceStatus,
+  baseLineItemPrice: number,
+  notes?: string
+): Invoice => {
+  const billingPeriodStart = startOfMonth(issueDate);
+  const billingPeriodEnd = endOfMonth(issueDate);
+  const periodDescription = format(billingPeriodStart, "MMMM yyyy");
+
+  const items = generateMockLineItems(baseLineItemPrice, periodDescription);
+  const { subtotal, taxAmount, total } = calculateInvoiceTotals(items);
+
+  return {
+    id,
+    callCenterId,
+    invoiceNumber,
+    issueDate: issueDate.toISOString(),
+    dueDate: dueDate.toISOString(),
+    billingPeriodStart: billingPeriodStart.toISOString(),
+    billingPeriodEnd: billingPeriodEnd.toISOString(),
+    items,
+    subtotal,
+    taxRate: 0.05,
+    taxAmount,
+    total,
+    status,
+    paidDate: status === "paid" ? new Date(dueDate.getTime() - Math.random() * 10 * 86400000).toISOString() : undefined, // Paid some days before due date
+    notes
+  };
 };
 
+const now = new Date();
 export let MOCK_INVOICES: Invoice[] = [
-  createInvoice("inv1", "cc1", "INV-2024-001", new Date("2024-07-01"), new Date("2024-07-31"), "paid", 5, "July 2024 services."),
-  createInvoice("inv2", "cc1", "INV-2024-002", new Date("2024-08-01"), new Date("2024-08-31"), "pending", 5, "August 2024 services."),
-  createInvoice("inv3", "cc2", "INV-2024-003", new Date("2024-07-05"), new Date("2024-08-04"), "paid", 0.02, "July usage."),
-  createInvoice("inv4", "cc2", "INV-2024-004", new Date("2024-08-05"), new Date("2024-09-04"), "pending", 0.02),
-  createInvoice("inv5", "cc3", "INV-2024-005", new Date("2024-06-15"), new Date("2024-07-15"), "overdue", 0.5, "Urgent: Overdue."),
-  createInvoice("inv6", "cc3", "INV-2024-006", new Date("2024-07-15"), new Date("2024-08-15"), "draft", 0.5),
+  createInvoice("inv1", "cc1", "INV-2024-001", subMonths(now, 2), new Date(subMonths(now, 2).setDate(28)), "paid", 5, "Services for 2 months ago."),
+  createInvoice("inv2", "cc1", "INV-2024-002", subMonths(now, 1), new Date(subMonths(now, 1).setDate(28)), "pending", 5, "Services for last month."),
+  createInvoice("inv3", "cc2", "INV-2024-003", subMonths(now, 2), new Date(subMonths(now, 2).setDate(28)), "paid", 0.02, "Usage for 2 months ago."),
+  createInvoice("inv4", "cc2", "INV-2024-004", subMonths(now, 1), new Date(subMonths(now, 1).setDate(28)), "pending", 0.02),
+  createInvoice("inv5", "cc3", "INV-2024-005", subMonths(now, 3), new Date(subMonths(now, 3).setDate(15)), "overdue", 0.5, "Urgent: Overdue."), // Older overdue
+  createInvoice("inv6", "cc3", "INV-2024-006", subMonths(now, 2), new Date(subMonths(now, 2).setDate(15)), "overdue", 0.5), // More recent overdue
+  createInvoice("inv7", "cc1", "INV-2024-007", new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth(), 28), "draft", 5, "Current month draft."),
+  createInvoice("inv8", "cc2", "INV-2024-008", new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth(), 28), "draft", 0.02, "Current month draft for West Coast."),
 ];
+
 
 // Updated MOCK_SCRIPT_VARIANTS to include campaignId
 export const MOCK_SCRIPT_VARIANTS: ScriptVariant[] = [
@@ -207,10 +242,10 @@ export const MOCK_BOTS: Bot[] = Array.from({ length: 25 }, (_, i) => {
     const ccIds = ["cc1", "cc2", "cc3"];
     const currentCcId = ccIds[i % ccIds.length];
     const ccAgents = MOCK_AGENTS.filter(ag => ag.callCenterId === currentCcId);
-    
+
     // Ensure agent exists for the CC, otherwise pick any agent as a fallback
-    const agent = ccAgents.length > 0 ? ccAgents[i % ccAgents.length] : MOCK_AGENTS[i % MOCK_AGENTS.length]; 
-    
+    const agent = ccAgents.length > 0 ? ccAgents[i % ccAgents.length] : MOCK_AGENTS[i % MOCK_AGENTS.length];
+
     // Ensure campaign exists for the agent, otherwise pick any campaign as a fallback
     const campaign = MOCK_CAMPAIGNS.find(c => c.id === agent.campaignId) || MOCK_CAMPAIGNS[i % MOCK_CAMPAIGNS.length];
 
@@ -247,7 +282,7 @@ export const MOCK_CALL_LOGS: CallLog[] = Array.from({ length: 50 }, (_, i) => {
   const bot = MOCK_BOTS[i % MOCK_BOTS.length];
   const campaign = MOCK_CAMPAIGNS.find(c => c.id === bot.campaignId) || MOCK_CAMPAIGNS[0];
   const callCenterId = bot.callCenterId;
-  
+
   const leadPhoneNumberBase = 55501000000 + i * 10 + Math.floor(Math.random() * 10);
   const leadPhoneNumber = `${String(leadPhoneNumberBase).slice(0,3)}-${String(leadPhoneNumberBase).slice(3,7)}-${String(leadPhoneNumberBase).slice(7,11)}`;
 
@@ -322,7 +357,7 @@ MOCK_CALL_LOGS.forEach(log => {
 
 // Mock Audit Log Data
 const auditLogActions = [
-  "User Login", "User Logout", "Viewed Dashboard", "Created Campaign", "Updated Campaign Status", 
+  "User Login", "User Logout", "Viewed Dashboard", "Created Campaign", "Updated Campaign Status",
   "Generated Bots", "Updated Bot Status", "Viewed Call Logs", "Added User", "Edited User Permissions",
   "Accessed Agent Optimization", "Generated Invoice", "Marked Invoice Paid", "Updated Call Center Billing"
 ];
