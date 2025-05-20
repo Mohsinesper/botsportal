@@ -11,11 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Cpu, Zap, Users, Shuffle, Clock } from "lucide-react";
+import { Loader2, Cpu, Zap, Users, Shuffle, Clock, AlertTriangle } from "lucide-react";
 import type { Campaign, Agent, Bot, Voice, ScriptVariant } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useCallCenter } from "@/contexts/CallCenterContext";
+import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES } from "@/lib/mock-data"; // Import centralized mock data
@@ -60,6 +61,7 @@ type BotGenerationFormData = z.infer<typeof botGenerationSchema>;
 
 export default function BotGenerationPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
+  const { currentUser, isLoading: isAuthLoading } = useAuth(); // Added currentUser
   const [isLoading, setIsLoading] = useState(false);
   const [generatedBots, setGeneratedBots] = useState<Bot[]>([]);
   
@@ -165,7 +167,7 @@ export default function BotGenerationPage() {
         name: `${data.botNamePrefix || selectedCampaign.name.substring(0,5).replace(/\s/g, '') }-${i + 1}`,
         campaignId: selectedCampaign.id,
         agentId: agentIdToUse!,
-        status: "active",
+        status: "active", // New bots are active by default
         creationDate: new Date().toISOString(),
         callCenterId: currentCallCenter.id, 
         activeDutyStartTime: data.activeDutyStartTime || undefined,
@@ -189,8 +191,12 @@ export default function BotGenerationPage() {
     const scriptVariant = campaign?.scriptVariants?.find(sv => sv.id === agent.scriptVariantId);
     return `${agent.name} (Script: ${scriptVariant?.name || 'N/A'}, Voice: ${voice?.name || 'N/A'})`;
   };
+  
+  const pageLoading = isCallCenterLoading || isAuthLoading;
 
-  if (isCallCenterLoading) {
+  const isActionDisabled = currentCallCenter?.status === 'inactive' && currentUser?.role !== 'SUPER_ADMIN';
+
+  if (pageLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-9 w-3/4 md:w-1/2" />
@@ -232,6 +238,21 @@ export default function BotGenerationPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-3xl font-bold tracking-tight">Bot Generation ({currentCallCenter.name})</h2>
+      
+      {isActionDisabled && (
+        <Card className="border-orange-500 bg-orange-50 dark:bg-orange-900/30">
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <AlertTriangle className="h-5 w-5 text-orange-600" />
+            <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">Functionality Limited</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-orange-600 dark:text-orange-300">
+              The current call center '{currentCallCenter.name}' is inactive. Bot generation is disabled for non-Super Admins.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Configure and Generate Bots</CardTitle>
@@ -248,7 +269,7 @@ export default function BotGenerationPage() {
                   <Select 
                     onValueChange={(value) => { field.onChange(value); }} 
                     value={field.value || ""} 
-                    disabled={campaigns.length === 0}
+                    disabled={campaigns.length === 0 || isActionDisabled}
                   >
                     <SelectTrigger className="w-full mt-1">
                       <SelectValue placeholder={campaigns.length === 0 ? "No campaigns for this call center" : "Choose a campaign"} />
@@ -271,19 +292,23 @@ export default function BotGenerationPage() {
                 name="generationType"
                 control={control}
                 render={({ field }) => (
-                  <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Label htmlFor="individual" className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary cursor-pointer">
-                       <RadioGroupItem value="individual" id="individual" className="sr-only" />
+                  <RadioGroup 
+                    onValueChange={field.onChange} 
+                    defaultValue={field.value} 
+                    className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4"
+                  >
+                    <Label htmlFor="individual" className={`flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary ${isActionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                       <RadioGroupItem value="individual" id="individual" className="sr-only" disabled={isActionDisabled} />
                        <Users className="mb-3 h-6 w-6" /> Individual
                        <span className="text-xs text-muted-foreground text-center mt-1">Manually select agent for one bot.</span>
                     </Label>
-                    <Label htmlFor="bulk-fifo" className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary cursor-pointer">
-                       <RadioGroupItem value="bulk-fifo" id="bulk-fifo" className="sr-only" />
+                    <Label htmlFor="bulk-fifo" className={`flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary ${isActionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                       <RadioGroupItem value="bulk-fifo" id="bulk-fifo" className="sr-only" disabled={isActionDisabled}/>
                        <Zap className="mb-3 h-6 w-6" /> Bulk (FIFO)
                        <span className="text-xs text-muted-foreground text-center mt-1">Assign agents sequentially.</span>
                     </Label>
-                    <Label htmlFor="bulk-random" className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary cursor-pointer">
-                       <RadioGroupItem value="bulk-random" id="bulk-random" className="sr-only" />
+                    <Label htmlFor="bulk-random" className={`flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary ${isActionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                       <RadioGroupItem value="bulk-random" id="bulk-random" className="sr-only" disabled={isActionDisabled}/>
                        <Shuffle className="mb-3 h-6 w-6" /> Bulk (Random)
                        <span className="text-xs text-muted-foreground text-center mt-1">Assign agents randomly.</span>
                     </Label>
@@ -302,7 +327,7 @@ export default function BotGenerationPage() {
                     <Select 
                         onValueChange={field.onChange} 
                         value={field.value || ""}  
-                        disabled={!watchedCampaignId || availableAgentsForCampaign.length === 0}
+                        disabled={!watchedCampaignId || availableAgentsForCampaign.length === 0 || isActionDisabled}
                     >
                         <SelectTrigger className="w-full mt-1">
                         <SelectValue placeholder={!watchedCampaignId ? "Select a campaign first" : (availableAgentsForCampaign.length === 0 ? "No agents for this campaign" : "Choose an agent configuration")} />
@@ -332,12 +357,12 @@ export default function BotGenerationPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <Label htmlFor="botCount">Number of Bots</Label>
-                    <Input id="botCount" type="number" {...register("botCount")} className="mt-1" min="1" disabled={!watchedCampaignId} />
+                    <Input id="botCount" type="number" {...register("botCount")} className="mt-1" min="1" disabled={!watchedCampaignId || isActionDisabled} />
                     {errors.botCount && <p className="text-sm text-destructive mt-1">{errors.botCount.message}</p>}
                 </div>
                 <div>
                     <Label htmlFor="botNamePrefix">Bot Name Prefix (Optional)</Label>
-                    <Input id="botNamePrefix" {...register("botNamePrefix")} className="mt-1" placeholder="e.g., CampaignXBot" disabled={!watchedCampaignId}/>
+                    <Input id="botNamePrefix" {...register("botNamePrefix")} className="mt-1" placeholder="e.g., CampaignXBot" disabled={!watchedCampaignId || isActionDisabled}/>
                 </div>
                  {!watchedCampaignId && campaigns.length > 0 && <p className="text-xs text-muted-foreground mt-1 col-span-full">Please select a campaign first to enable bulk generation.</p>}
                  {watchedCampaignId && availableAgentsForCampaign.length === 0 && <p className="text-xs text-warning-foreground mt-1 col-span-full bg-warning/20 p-2 rounded-md">Warning: No agent configurations found for the selected campaign. Bots cannot be generated without agents. Please create agents on the <Link href="/agents" className="underline text-primary">Agent Configurations</Link> page.</p>}
@@ -349,12 +374,12 @@ export default function BotGenerationPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="activeDutyStartTime">Start Time (e.g., 09:00)</Label>
-                        <Input id="activeDutyStartTime" {...register("activeDutyStartTime")} className="mt-1" placeholder="HH:MM" />
+                        <Input id="activeDutyStartTime" {...register("activeDutyStartTime")} className="mt-1" placeholder="HH:MM" disabled={isActionDisabled} />
                         {errors.activeDutyStartTime && <p className="text-sm text-destructive mt-1">{errors.activeDutyStartTime.message}</p>}
                     </div>
                     <div>
                         <Label htmlFor="activeDutyEndTime">End Time (e.g., 17:00)</Label>
-                        <Input id="activeDutyEndTime" {...register("activeDutyEndTime")} className="mt-1" placeholder="HH:MM" />
+                        <Input id="activeDutyEndTime" {...register("activeDutyEndTime")} className="mt-1" placeholder="HH:MM" disabled={isActionDisabled} />
                         {errors.activeDutyEndTime && <p className="text-sm text-destructive mt-1">{errors.activeDutyEndTime.message}</p>}
                     </div>
                 </div>
@@ -368,7 +393,8 @@ export default function BotGenerationPage() {
                     isLoading || 
                     !watchedCampaignId || 
                     (generationType === 'individual' && !watch("agentId")) ||
-                    (generationType !== 'individual' && availableAgentsForCampaign.length === 0 && campaigns.length > 0) 
+                    (generationType !== 'individual' && availableAgentsForCampaign.length === 0 && campaigns.length > 0) ||
+                    isActionDisabled // Main disable flag
                 } 
                 className="w-full md:w-auto"
             >

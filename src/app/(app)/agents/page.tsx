@@ -15,9 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { FilterX, Search, Settings2, FilePenLine, Volume2, Copy } from "lucide-react";
+import { FilterX, Search, Settings2, FilePenLine, Volume2, Copy, AlertTriangle } from "lucide-react";
 import type { Agent, Campaign, ScriptVariant, Voice } from "@/types";
 import { useCallCenter } from "@/contexts/CallCenterContext";
+import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
 import { MOCK_AGENTS, MOCK_CAMPAIGNS, MOCK_SCRIPT_VARIANTS, MOCK_VOICES, AVAILABLE_BACKGROUND_NOISES } from "@/lib/mock-data";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,9 +26,9 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import * as z from "zod"; // Added Zod import
-import { useForm } from "react-hook-form"; // Added for duplicateForm
-import { zodResolver } from "@hookform/resolvers/zod"; // Added for duplicateForm
+import * as z from "zod"; 
+import { useForm } from "react-hook-form"; 
+import { zodResolver } from "@hookform/resolvers/zod"; 
 
 interface EditingAgentState {
   id: string;
@@ -49,6 +50,7 @@ type DuplicateAgentFormData = z.infer<typeof duplicateAgentSchema>;
 
 export default function AgentConfigurationsPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
+  const { currentUser, isLoading: isAuthLoading } = useAuth(); // Added currentUser
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -60,14 +62,12 @@ export default function AgentConfigurationsPage() {
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<EditingAgentState | null>(null);
   
-  // States for editing within the dialog
   const [editableAgentName, setEditableAgentName] = useState("");
   const [editableVoiceId, setEditableVoiceId] = useState("");
   const [editableScriptContent, setEditableScriptContent] = useState("");
   const [editableBackgroundNoise, setEditableBackgroundNoise] = useState<string | undefined>("none");
   const [editableBackgroundNoiseVolume, setEditableBackgroundNoiseVolume] = useState<number>(0);
 
-  // State for duplication dialog
   const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
   const [agentToDuplicate, setAgentToDuplicate] = useState<Agent | null>(null);
   const duplicateForm = useForm<DuplicateAgentFormData>({
@@ -80,7 +80,7 @@ export default function AgentConfigurationsPage() {
       setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
       setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
       const ccVoices = MOCK_VOICES.filter(v => v.callCenterId === currentCallCenter.id);
-      setVoices(ccVoices); // Set all MOCK_VOICES initially, then filter for CC
+      setVoices(ccVoices); 
       setCallCenterVoices(ccVoices);
     } else {
       setAgents([]);
@@ -145,7 +145,6 @@ export default function AgentConfigurationsPage() {
   const handleSaveSettings = () => {
     if (!editingAgent) return;
 
-    // Update script content (globally, as script variants are shared)
     const globalCampaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingAgent.campaignId);
     if (globalCampaignIndex > -1) {
       const campaignToUpdate = MOCK_CAMPAIGNS[globalCampaignIndex];
@@ -157,7 +156,6 @@ export default function AgentConfigurationsPage() {
       }
     }
 
-    // Update agent's specific settings (name, voice, background noise)
     const agentIndexGlobal = MOCK_AGENTS.findIndex(a => a.id === editingAgent.id);
     if (agentIndexGlobal > -1) {
         MOCK_AGENTS[agentIndexGlobal].name = editableAgentName;
@@ -166,7 +164,6 @@ export default function AgentConfigurationsPage() {
         MOCK_AGENTS[agentIndexGlobal].backgroundNoiseVolume = editableBackgroundNoise === "none" ? undefined : editableBackgroundNoiseVolume;
     }
     
-    // Refresh local states
     if (currentCallCenter) {
       setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
       setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
@@ -187,10 +184,10 @@ export default function AgentConfigurationsPage() {
     if (!agentToDuplicate || !currentCallCenter) return;
 
     const newAgent: Agent = {
-      ...JSON.parse(JSON.stringify(agentToDuplicate)), // Deep copy
+      ...JSON.parse(JSON.stringify(agentToDuplicate)), 
       id: `agent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: data.newAgentName,
-      callCenterId: currentCallCenter.id, // Ensure it's for the current call center
+      callCenterId: currentCallCenter.id, 
     };
 
     MOCK_AGENTS.push(newAgent);
@@ -201,8 +198,11 @@ export default function AgentConfigurationsPage() {
     setAgentToDuplicate(null);
   };
 
+  const pageLoading = isCallCenterLoading || isAuthLoading;
+  const isActionDisabled = currentCallCenter?.status === 'inactive' && currentUser?.role !== 'SUPER_ADMIN';
 
-  if (isCallCenterLoading) {
+
+  if (pageLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-9 w-3/4 md:w-1/2" />
@@ -243,6 +243,20 @@ export default function AgentConfigurationsPage() {
           <Settings2 className="mr-3 h-8 w-8" />Agent Configurations ({currentCallCenter.name})
         </h2>
       </div>
+
+      {isActionDisabled && (
+        <Card className="border-orange-500 bg-orange-50 dark:bg-orange-900/30">
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <AlertTriangle className="h-5 w-5 text-orange-600" />
+            <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">Functionality Limited</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-orange-600 dark:text-orange-300">
+              The current call center '{currentCallCenter.name}' is inactive. Modifying or duplicating agent configurations is disabled for non-Super Admins.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="shadow-lg">
         <CardHeader>
@@ -300,7 +314,7 @@ export default function AgentConfigurationsPage() {
                                 size="icon" 
                                 onClick={() => handleOpenSettingsDialog(agent)}
                                 title="Edit Agent Settings"
-                                disabled={!scriptVariant}
+                                disabled={!scriptVariant || isActionDisabled}
                             >
                             <FilePenLine className="h-4 w-4" />
                             </Button>
@@ -309,6 +323,7 @@ export default function AgentConfigurationsPage() {
                                 size="icon"
                                 onClick={() => handleOpenDuplicateDialog(agent)}
                                 title="Duplicate Agent"
+                                disabled={isActionDisabled}
                             >
                                 <Copy className="h-4 w-4" />
                             </Button>
@@ -439,5 +454,3 @@ export default function AgentConfigurationsPage() {
     </div>
   );
 }
-
-    

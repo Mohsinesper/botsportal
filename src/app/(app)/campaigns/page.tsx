@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye, FilterX, Search, FileJson, MessageSquare, ArrowUpDown, CheckSquare, Square } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye, FilterX, Search, FileJson, MessageSquare, ArrowUpDown, CheckSquare, Square, AlertTriangle } from "lucide-react";
 import type { Campaign, ScriptVariant, CallFlow, CallFlowStep } from "@/types"; 
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,7 +48,7 @@ type CampaignFormData = z.infer<typeof campaignSchemaBase>;
 
 export default function CampaignsPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
-  const { currentUser } = useAuth(); 
+  const { currentUser, isLoading: isAuthLoading } = useAuth(); 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isCampaignFormOpen, setIsCampaignFormOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
@@ -61,7 +61,6 @@ export default function CampaignsPage() {
   const [searchTermCampaigns, setSearchTermCampaigns] = useState("");
   const [filterStatusCampaigns, setFilterStatusCampaigns] = useState<Campaign["status"] | "all">("all");
 
-  // State for sorting and selection
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
   const [sortColumn, setSortColumn] = useState<SortableCampaignKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -165,7 +164,6 @@ export default function CampaignsPage() {
     setSearchTermCampaigns("");
     setFilterStatusCampaigns("all");
     setSortColumn(null);
-    // setSelectedCampaignIds([]); // Keep selection or clear based on preference
   };
 
   const handleCampaignFormSubmit = async (data: CampaignFormData) => {
@@ -367,11 +365,15 @@ export default function CampaignsPage() {
       delete: () => selectedCampaignIds.forEach(id => handleDeleteCampaign(id)),
     };
     actionMap[action]();
-    toast({ title: `Bulk Action: ${action.charAt(0).toUpperCase() + action.slice(1)}`, description: `${selectedCampaignIds.length} campaigns affected.`});
-    setSelectedCampaignIds([]); // Clear selection after action
+    toast({ title: `Bulk Action: ${action.charAt(0).toUpperCase() + action.slice(1)}`, description: `${selectedCampaignIds.length} campaign(s) affected.`});
+    setSelectedCampaignIds([]); 
   };
 
-  if (isCallCenterLoading) {
+  const pageLoading = isCallCenterLoading || isAuthLoading;
+  const isActionDisabled = currentCallCenter?.status === 'inactive' && currentUser?.role !== 'SUPER_ADMIN';
+
+
+  if (pageLoading) {
     return ( <div className="space-y-6"> <Skeleton className="h-9 w-3/4 md:w-1/2" /> <Card><Skeleton className="h-64 w-full" /></Card> </div> );
   }
 
@@ -395,10 +397,26 @@ export default function CampaignsPage() {
           setEditingCampaign(null); 
           reset({name: "", status: "draft", userMasterScript: "", variantCount: 1, targetAudience: "", callObjective: "", tone: "Professional"}); 
           setIsCampaignFormOpen(true); 
-        }}>
+        }}
+        disabled={isActionDisabled}
+        >
           <PlusCircle className="mr-2 h-4 w-4" /> Create Campaign
         </Button>
       </div>
+
+      {isActionDisabled && (
+        <Card className="border-orange-500 bg-orange-50 dark:bg-orange-900/30">
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <AlertTriangle className="h-5 w-5 text-orange-600" />
+            <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">Functionality Limited</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-orange-600 dark:text-orange-300">
+              The current call center '{currentCallCenter.name}' is inactive. Creating or modifying campaigns is disabled for non-Super Admins.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={isCampaignFormOpen} onOpenChange={(isOpen) => {
         setIsCampaignFormOpen(isOpen);
@@ -605,10 +623,10 @@ export default function CampaignsPage() {
             <div className="p-4 border-b bg-muted/50">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{selectedCampaignIds.length} campaign(s) selected.</span>
-                <Button size="sm" onClick={() => handleBulkAction("activate")}>Activate Selected</Button>
-                <Button size="sm" variant="secondary" onClick={() => handleBulkAction("pause")}>Pause Selected</Button>
-                <Button size="sm" variant="outline" onClick={() => handleBulkAction("archive")}>Archive Selected</Button>
-                <Button size="sm" variant="destructive" onClick={() => handleBulkAction("delete")}>Delete Selected</Button>
+                <Button size="sm" onClick={() => handleBulkAction("activate")} disabled={isActionDisabled}>Activate Selected</Button>
+                <Button size="sm" variant="secondary" onClick={() => handleBulkAction("pause")} disabled={isActionDisabled}>Pause Selected</Button>
+                <Button size="sm" variant="outline" onClick={() => handleBulkAction("archive")} disabled={isActionDisabled}>Archive Selected</Button>
+                <Button size="sm" variant="destructive" onClick={() => handleBulkAction("delete")} disabled={isActionDisabled}>Delete Selected</Button>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedCampaignIds([])}>Clear Selection</Button>
               </div>
             </div>
@@ -623,6 +641,7 @@ export default function CampaignsPage() {
                         onCheckedChange={(checked) => handleSelectAllCampaigns(Boolean(checked))}
                         aria-label="Select all filtered campaigns"
                         indeterminate={isSomeFilteredCampaignsSelected ? true : undefined}
+                        disabled={isActionDisabled && filteredAndSortedCampaignsData.length > 0}
                     />
                   </TableHead>
                   <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-muted/50 transition-colors">
@@ -655,6 +674,7 @@ export default function CampaignsPage() {
                             checked={selectedCampaignIds.includes(campaign.id)}
                             onCheckedChange={(checked) => handleSelectCampaign(campaign.id, Boolean(checked))}
                             aria-label={`Select campaign ${campaign.name}`}
+                            disabled={isActionDisabled}
                         />
                       </TableCell>
                       <TableCell className="font-medium">{campaign.name}</TableCell>
@@ -666,6 +686,7 @@ export default function CampaignsPage() {
                             variant="outline" 
                             size="sm" 
                             onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }}
+                            disabled={isActionDisabled}
                           >
                             <FileJson className="mr-2 h-4 w-4" /> Review ({campaign.callFlows.length})
                           </Button>
@@ -677,25 +698,25 @@ export default function CampaignsPage() {
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button variant="ghost" className="h-8 w-8 p-0" disabled={isActionDisabled}>
                               <span className="sr-only">Open menu for {campaign.name}</span>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleOpenEditCampaignForm(campaign)}>
+                            <DropdownMenuItem onClick={() => handleOpenEditCampaignForm(campaign)} disabled={isActionDisabled}>
                               <Edit2 className="mr-2 h-4 w-4" /> Edit Details & Master Script
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }} disabled={!campaign.callFlows || campaign.callFlows.length === 0}>
+                            <DropdownMenuItem onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }} disabled={!campaign.callFlows || campaign.callFlows.length === 0 || isActionDisabled}>
                               <FileJson className="mr-2 h-4 w-4" /> Review/Edit Call Flows
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            {campaign.status !== "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "active")}><Play className="mr-2 h-4 w-4" /> Activate</DropdownMenuItem>}
-                            {campaign.status === "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "paused")}><Pause className="mr-2 h-4 w-4" /> Pause</DropdownMenuItem>}
-                            {campaign.status !== "archived" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "archived")}><Archive className="mr-2 h-4 w-4" /> Archive</DropdownMenuItem>}
+                            {campaign.status !== "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "active")} disabled={isActionDisabled}><Play className="mr-2 h-4 w-4" /> Activate</DropdownMenuItem>}
+                            {campaign.status === "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "paused")} disabled={isActionDisabled}><Pause className="mr-2 h-4 w-4" /> Pause</DropdownMenuItem>}
+                            {campaign.status !== "archived" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "archived")} disabled={isActionDisabled}><Archive className="mr-2 h-4 w-4" /> Archive</DropdownMenuItem>}
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                            <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isActionDisabled}>
                               <Trash2 className="mr-2 h-4 w-4" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -714,4 +735,3 @@ export default function CampaignsPage() {
     </div>
   );
 }
-

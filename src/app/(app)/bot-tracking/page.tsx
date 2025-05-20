@@ -10,10 +10,11 @@ import type { Bot, Campaign, Agent, Voice } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, FilterX, PhoneCall, MoreHorizontal, Play, Pause, PowerOff, ArrowUpDown, CheckSquare, Square } from "lucide-react";
+import { CalendarIcon, FilterX, PhoneCall, MoreHorizontal, Play, Pause, PowerOff, ArrowUpDown, CheckSquare, Square, AlertTriangle } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
 import { useCallCenter } from "@/contexts/CallCenterContext";
+import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
@@ -26,6 +27,7 @@ type SortDirection = "asc" | "desc";
 
 export default function BotTrackingPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
+  const { currentUser, isLoading: isAuthLoading } = useAuth(); // Added currentUser
 
   const [bots, setBots] = useState<Bot[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -108,7 +110,6 @@ export default function BotTrackingPage() {
           valB = b[sortColumn as keyof Bot];
         }
         
-        // Handle undefined or null values by pushing them to the end
         if (valA == null && valB == null) return 0;
         if (valA == null) return 1;
         if (valB == null) return -1;
@@ -162,14 +163,14 @@ export default function BotTrackingPage() {
         MOCK_BOTS[botIndexGlobal].status = newStatus;
       }
     });
-    if (currentCallCenter) { // Refresh local state
+    if (currentCallCenter) { 
         setBots(MOCK_BOTS.filter(b => b.callCenterId === currentCallCenter.id));
     }
     toast({
       title: "Bot Statuses Updated",
       description: `${botIds.length} bot(s) are now ${newStatus}.`,
     });
-    setSelectedBotIds([]); // Clear selection
+    setSelectedBotIds([]); 
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -204,7 +205,10 @@ export default function BotTrackingPage() {
       <ArrowUpDown className="ml-2 h-4 w-4 text-primary transform rotate-180" />;
   };
   
-  if (isCallCenterLoading) {
+  const pageLoading = isCallCenterLoading || isAuthLoading;
+  const isActionDisabled = currentCallCenter?.status === 'inactive' && currentUser?.role !== 'SUPER_ADMIN';
+
+  if (pageLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-9 w-3/4 md:w-1/2" />
@@ -256,6 +260,20 @@ export default function BotTrackingPage() {
     <div className="space-y-6">
       <h2 className="text-3xl font-bold tracking-tight">Bot Tracking ({currentCallCenter.name})</h2>
       
+      {isActionDisabled && (
+        <Card className="border-orange-500 bg-orange-50 dark:bg-orange-900/30">
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <AlertTriangle className="h-5 w-5 text-orange-600" />
+            <CardTitle className="text-orange-700 dark:text-orange-400 text-lg">Functionality Limited</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-orange-600 dark:text-orange-300">
+              The current call center '{currentCallCenter.name}' is inactive. Modifying bot statuses is disabled for non-Super Admins.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Filter Bots</CardTitle>
@@ -333,9 +351,9 @@ export default function BotTrackingPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex gap-2">
-            <Button size="sm" onClick={() => updateBotStatuses(selectedBotIds, "active")}>Set Active</Button>
-            <Button size="sm" variant="secondary" onClick={() => updateBotStatuses(selectedBotIds, "inactive")}>Set Inactive</Button>
-            <Button size="sm" variant="destructive" onClick={() => updateBotStatuses(selectedBotIds, "error")}>Set Error (Mock)</Button>
+            <Button size="sm" onClick={() => updateBotStatuses(selectedBotIds, "active")} disabled={isActionDisabled}>Set Active</Button>
+            <Button size="sm" variant="secondary" onClick={() => updateBotStatuses(selectedBotIds, "inactive")} disabled={isActionDisabled}>Set Inactive</Button>
+            <Button size="sm" variant="destructive" onClick={() => updateBotStatuses(selectedBotIds, "error")} disabled={isActionDisabled}>Set Error (Mock)</Button>
             <Button size="sm" variant="outline" onClick={() => setSelectedBotIds([])}>Clear Selection</Button>
           </CardContent>
         </Card>
@@ -357,6 +375,7 @@ export default function BotTrackingPage() {
                         onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
                         aria-label="Select all filtered bots"
                         indeterminate={isSomeFilteredBotsSelected ? true : undefined}
+                        disabled={isActionDisabled && filteredAndSortedBots.length > 0}
                       />
                   </TableHead>
                   <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-muted/50 transition-colors">
@@ -400,6 +419,7 @@ export default function BotTrackingPage() {
                           checked={selectedBotIds.includes(bot.id)}
                           onCheckedChange={(checked) => handleSelectBot(bot.id, Boolean(checked))}
                           aria-label={`Select bot ${bot.name}`}
+                          disabled={isActionDisabled}
                         />
                     </TableCell>
                     <TableCell className="font-medium">{bot.name}</TableCell>
@@ -417,7 +437,7 @@ export default function BotTrackingPage() {
                     <TableCell className="text-center">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" disabled={isActionDisabled && bot.status !== 'active' /* Allow mock call for active bots even if CC inactive */}>
                             <MoreHorizontal className="h-4 w-4" />
                             <span className="sr-only">Bot Actions for {bot.name}</span>
                           </Button>
@@ -430,19 +450,19 @@ export default function BotTrackingPage() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {bot.status !== "active" && (
-                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "active")}>
+                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "active")} disabled={isActionDisabled}>
                               <Play className="mr-2 h-4 w-4" />
                               Set Active
                             </DropdownMenuItem>
                           )}
                           {bot.status === "active" && (
-                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "inactive")}>
+                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "inactive")} disabled={isActionDisabled}>
                               <Pause className="mr-2 h-4 w-4" />
                               Set Inactive
                             </DropdownMenuItem>
                           )}
                            {bot.status !== "error" && (
-                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "error")}>
+                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "error")} disabled={isActionDisabled}>
                               <PowerOff className="mr-2 h-4 w-4 text-destructive" />
                               Set Error (Mock)
                             </DropdownMenuItem>
@@ -466,5 +486,3 @@ export default function BotTrackingPage() {
     </div>
   );
 }
-
-    
