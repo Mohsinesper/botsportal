@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FilterX, Search, Settings2, FilePenLine, Volume2, Copy, AlertTriangle } from "lucide-react";
 import type { Agent, Campaign, ScriptVariant, Voice } from "@/types";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
+import { useAuth } from "@/contexts/AuthContext";
 import { MOCK_AGENTS, MOCK_CAMPAIGNS, MOCK_SCRIPT_VARIANTS, MOCK_VOICES, AVAILABLE_BACKGROUND_NOISES } from "@/lib/mock-data";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,8 +27,9 @@ import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import * as z from "zod"; 
-import { useForm } from "react-hook-form"; 
+import { useForm, Controller } from "react-hook-form"; 
 import { zodResolver } from "@hookform/resolvers/zod"; 
+import { addAuditLog } from "@/services/audit-log-service";
 
 interface EditingAgentState {
   id: string;
@@ -50,7 +51,7 @@ type DuplicateAgentFormData = z.infer<typeof duplicateAgentSchema>;
 
 export default function AgentConfigurationsPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
-  const { currentUser, isLoading: isAuthLoading } = useAuth(); // Added currentUser
+  const { currentUser, isLoading: isAuthLoading } = useAuth();
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -143,7 +144,7 @@ export default function AgentConfigurationsPage() {
   };
 
   const handleSaveSettings = () => {
-    if (!editingAgent) return;
+    if (!editingAgent || !currentUser || !currentCallCenter) return;
 
     const globalCampaignIndex = MOCK_CAMPAIGNS.findIndex(c => c.id === editingAgent.campaignId);
     if (globalCampaignIndex > -1) {
@@ -169,6 +170,21 @@ export default function AgentConfigurationsPage() {
       setAgents(MOCK_AGENTS.filter(a => a.callCenterId === currentCallCenter.id));
     }
     
+    addAuditLog({
+        action: "AGENT_SETTINGS_UPDATED",
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: { 
+            agentId: editingAgent.id, 
+            agentName: editableAgentName, 
+            voiceId: editableVoiceId, 
+            scriptVariantId: editingAgent.scriptVariantId,
+            backgroundNoise: editableBackgroundNoise === "none" ? "None" : editableBackgroundNoise, 
+            backgroundNoiseVolume: editableBackgroundNoise === "none" ? 0 : editableBackgroundNoiseVolume,
+        }
+    });
     toast({ title: "Agent Settings Updated", description: `Settings for agent "${editableAgentName}" saved.` });
     setIsSettingsDialogOpen(false);
     setEditingAgent(null);
@@ -181,7 +197,7 @@ export default function AgentConfigurationsPage() {
   };
 
   const handleDuplicateAgent = (data: DuplicateAgentFormData) => {
-    if (!agentToDuplicate || !currentCallCenter) return;
+    if (!agentToDuplicate || !currentCallCenter || !currentUser) return;
 
     const newAgent: Agent = {
       ...JSON.parse(JSON.stringify(agentToDuplicate)), 
@@ -193,6 +209,19 @@ export default function AgentConfigurationsPage() {
     MOCK_AGENTS.push(newAgent);
     setAgents(prev => [...prev, newAgent]);
     
+    addAuditLog({
+        action: "AGENT_DUPLICATED",
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: { 
+            originalAgentId: agentToDuplicate.id, 
+            originalAgentName: agentToDuplicate.name, 
+            newAgentId: newAgent.id, 
+            newAgentName: newAgent.name 
+        }
+    });
     toast({ title: "Agent Duplicated", description: `Agent "${newAgent.name}" created.` });
     setIsDuplicateDialogOpen(false);
     setAgentToDuplicate(null);
@@ -404,7 +433,7 @@ export default function AgentConfigurationsPage() {
                     </div>
                     {editableBackgroundNoise && editableBackgroundNoise !== "none" && (
                     <div>
-                        <Label htmlFor="agentBackgroundNoiseVolume">Noise Volume ({editableBackgroundNoiseVolume}%)</Label>
+                        <Label htmlFor="agentBackgroundNoiseVolume">Noise Volume ({editableBackgroundNoiseVolume || 0}%)</Label>
                         <Slider
                             id="agentBackgroundNoiseVolume"
                             min={0}

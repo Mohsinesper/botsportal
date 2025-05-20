@@ -14,20 +14,21 @@ import { CalendarIcon, FilterX, PhoneCall, MoreHorizontal, Play, Pause, PowerOff
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES, MOCK_BOTS } from "@/lib/mock-data";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import { addAuditLog } from "@/services/audit-log-service";
 
 type SortableBotKey = keyof Bot | 'campaignName' | 'agentName';
 type SortDirection = "asc" | "desc";
 
 export default function BotTrackingPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
-  const { currentUser, isLoading: isAuthLoading } = useAuth(); // Added currentUser
+  const { currentUser, isLoading: isAuthLoading } = useAuth();
 
   const [bots, setBots] = useState<Bot[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -166,6 +167,18 @@ export default function BotTrackingPage() {
     if (currentCallCenter) { 
         setBots(MOCK_BOTS.filter(b => b.callCenterId === currentCallCenter.id));
     }
+
+    if (currentUser && currentCallCenter) {
+        addAuditLog({
+            action: "BOT_STATUSES_UPDATED",
+            userId: currentUser.id,
+            userName: currentUser.name || currentUser.email,
+            callCenterId: currentCallCenter.id,
+            callCenterName: currentCallCenter.name,
+            details: { botIds: botIds, newStatus: newStatus }
+        });
+    }
+
     toast({
       title: "Bot Statuses Updated",
       description: `${botIds.length} bot(s) are now ${newStatus}.`,
@@ -374,7 +387,7 @@ export default function BotTrackingPage() {
                         checked={isAllFilteredBotsSelected}
                         onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
                         aria-label="Select all filtered bots"
-                        indeterminate={isSomeFilteredBotsSelected ? true : undefined}
+                        indeterminate={isSomeFilteredBotsSelected ? undefined : false}
                         disabled={isActionDisabled && filteredAndSortedBots.length > 0}
                       />
                   </TableHead>

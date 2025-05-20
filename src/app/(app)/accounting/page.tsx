@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
 import { DateRange } from "react-day-picker";
+import { addAuditLog } from "@/services/audit-log-service";
 
 const supportedCurrencies = ["USD", "EUR", "GBP"] as const;
 
@@ -47,7 +48,6 @@ type GenerateInvoiceFormData = z.infer<typeof generateInvoiceSchema>;
 
 const editInvoiceSchema = z.object({
   invoiceId: z.string(),
-  // issueDate: z.date({ required_error: "Issue date is required." }), // For now, issue date (and thus period) is not editable
   dueDate: z.date({ required_error: "Due date is required." }),
   notes: z.string().optional(),
 });
@@ -65,16 +65,11 @@ export default function AccountingPage() {
   const [isEditInvoiceDialogOpen, setIsEditInvoiceDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
-
-  // Filters for Invoice Management
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "all" | "overdue">("all");
   const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>(undefined);
   const [filterCallCenterId, setFilterCallCenterId] = useState<string | "all">("all");
   const [searchTermInvoices, setSearchTermInvoices] = useState("");
-
-  // Search for Rate Management
   const [rateManagementSearchTerm, setRateManagementSearchTerm] = useState("");
-
 
   const rateForm = useForm<BillingConfigFormData>({
     resolver: zodResolver(billingConfigSchema),
@@ -108,7 +103,6 @@ export default function AccountingPage() {
     if (editingInvoice) {
         editInvoiceForm.reset({
             invoiceId: editingInvoice.id,
-            // issueDate: parseISO(editingInvoice.issueDate),
             dueDate: parseISO(editingInvoice.dueDate),
             notes: editingInvoice.notes || "",
         });
@@ -122,9 +116,17 @@ export default function AccountingPage() {
   };
 
   const handleSaveRateConfig = (data: BillingConfigFormData) => {
-    if (!editingRateCallCenter) return;
+    if (!editingRateCallCenter || !currentUser) return;
     const updatedCallCenter = updateCallCenterBillingConfig(editingRateCallCenter.id, data);
     if (updatedCallCenter) {
+      addAuditLog({
+          action: "CALL_CENTER_RATE_CONFIG_UPDATED",
+          userId: currentUser.id,
+          userName: currentUser.name || currentUser.email,
+          callCenterId: updatedCallCenter.id,
+          callCenterName: updatedCallCenter.name,
+          details: { newConfig: data }
+      });
       toast({ title: "Billing Rate Updated", description: `Rates for ${updatedCallCenter.name} saved.` });
     } else {
       toast({ title: "Error", description: "Failed to update billing rate.", variant: "destructive" });
@@ -134,10 +136,20 @@ export default function AccountingPage() {
   };
 
   const handleGenerateInvoice = (data: GenerateInvoiceFormData) => {
+    if (!currentUser) return;
     const result = generateNewInvoice(data.callCenterId, data.issueDate, data.dueDate, data.notes);
     if ("error" in result) {
       toast({ title: "Invoice Generation Failed", description: result.error, variant: "destructive" });
     } else {
+      const invCallCenter = allCallCenters.find(cc => cc.id === data.callCenterId);
+      addAuditLog({
+          action: "INVOICE_GENERATED",
+          userId: currentUser.id,
+          userName: currentUser.name || currentUser.email,
+          callCenterId: data.callCenterId,
+          callCenterName: invCallCenter?.name || "N/A",
+          details: { invoiceNumber: result.invoiceNumber, callCenterId: data.callCenterId, issueDate: format(data.issueDate, "yyyy-MM-dd"), dueDate: format(data.dueDate, "yyyy-MM-dd") }
+      });
       toast({ title: "Invoice Generated", description: `Invoice ${result.invoiceNumber} created.` });
       setInvoices(getAllInvoices());
     }
@@ -146,9 +158,21 @@ export default function AccountingPage() {
   };
 
   const handleUpdateInvoiceStatus = (invoiceId: string, status: InvoiceStatus) => {
-    updateInvoiceStatus(invoiceId, status);
-    setInvoices(getAllInvoices());
-    toast({ title: "Invoice Updated", description: `Invoice status changed to ${status}.` });
+    if (!currentUser) return;
+    const updatedInvoice = updateInvoiceStatus(invoiceId, status);
+    if (updatedInvoice) {
+        setInvoices(getAllInvoices());
+        const invCallCenter = allCallCenters.find(cc => cc.id === updatedInvoice.callCenterId);
+        addAuditLog({
+            action: "INVOICE_STATUS_UPDATED",
+            userId: currentUser.id,
+            userName: currentUser.name || currentUser.email,
+            callCenterId: updatedInvoice.callCenterId,
+            callCenterName: invCallCenter?.name || "N/A",
+            details: { invoiceId: invoiceId, invoiceNumber: updatedInvoice.invoiceNumber, newStatus: status }
+        });
+        toast({ title: "Invoice Updated", description: `Invoice status changed to ${status}.` });
+    }
   };
 
   const handleOpenEditInvoiceDialog = (invoice: Invoice) => {
@@ -157,9 +181,19 @@ export default function AccountingPage() {
   };
 
   const handleEditInvoiceSubmit = (data: EditInvoiceFormData) => {
+    if (!currentUser) return;
     const updated = updateInvoiceDetails(data.invoiceId, data.dueDate, data.notes);
     if (updated) {
         setInvoices(getAllInvoices());
+        const invCallCenter = allCallCenters.find(cc => cc.id === updated.callCenterId);
+        addAuditLog({
+            action: "INVOICE_DETAILS_UPDATED",
+            userId: currentUser.id,
+            userName: currentUser.name || currentUser.email,
+            callCenterId: updated.callCenterId,
+            callCenterName: invCallCenter?.name || "N/A",
+            details: { invoiceId: updated.id, invoiceNumber: updated.invoiceNumber, newDueDate: format(data.dueDate, "yyyy-MM-dd"), newNotes: data.notes }
+        });
         toast({ title: "Invoice Updated", description: `Invoice ${updated.invoiceNumber} details saved.`});
     } else {
         toast({ title: "Error", description: "Failed to update invoice details.", variant: "destructive" });

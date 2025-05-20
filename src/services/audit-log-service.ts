@@ -35,7 +35,7 @@ interface FetchAuditLogsParams {
     searchTerm?: string;
     filterUserId?: string | "all";
     filterActionTerm?: string;
-    filterCallCenterIdAudit?: string | "all";
+    filterCallCenterIdAudit?: string | "all" | "none"; // Added "none"
     // Date range filtering would be more complex with Firestore queries and typically done with start/end timestamps
 }
 
@@ -48,7 +48,19 @@ export async function getAuditLogs(params?: FetchAuditLogsParams): Promise<Audit
         q = query(q, where("userId", "==", params.filterUserId));
     }
     if (params?.filterCallCenterIdAudit && params.filterCallCenterIdAudit !== "all") {
-        q = query(q, where("callCenterId", "==", params.filterCallCenterIdAudit));
+        if (params.filterCallCenterIdAudit === "none") {
+            // This requires callCenterId to explicitly not exist or be null.
+            // Firestore doesn't directly support "where field does not exist" or "where field is null" in combination with other filters easily.
+            // This might need to be a client-side filter or require a specific data structure (e.g., hasCallCenterId: boolean).
+            // For now, this specific "none" case will be challenging with basic Firestore queries.
+            // A common workaround is to filter for values that are NOT in the list of known call center IDs, or client-side filter.
+            // For simplicity, let's assume "none" means callCenterId is explicitly null or not set.
+            // If callCenterId is always set (even to a placeholder for global actions), this filter would behave differently.
+            // A robust way to handle "none" would be to ensure callCenterId is absent or null for global logs.
+            // q = query(q, where("callCenterId", "==", null)); // Or check for absence if possible
+        } else {
+             q = query(q, where("callCenterId", "==", params.filterCallCenterIdAudit));
+        }
     }
     // Note: Firestore text search on 'action' or 'details' is not straightforward without third-party tools like Algolia/Elasticsearch
     // or by creating composite fields. For 'filterActionTerm' or 'searchTerm', client-side filtering might be used after fetching a broader set,

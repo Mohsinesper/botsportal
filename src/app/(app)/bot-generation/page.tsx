@@ -16,10 +16,11 @@ import type { Campaign, Agent, Bot, Voice, ScriptVariant } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES } from "@/lib/mock-data"; // Import centralized mock data
+import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES } from "@/lib/mock-data";
+import { addAuditLog } from "@/services/audit-log-service";
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -61,7 +62,7 @@ type BotGenerationFormData = z.infer<typeof botGenerationSchema>;
 
 export default function BotGenerationPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
-  const { currentUser, isLoading: isAuthLoading } = useAuth(); // Added currentUser
+  const { currentUser, isLoading: isAuthLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [generatedBots, setGeneratedBots] = useState<Bot[]>([]);
   
@@ -118,8 +119,8 @@ export default function BotGenerationPage() {
 
     await new Promise(resolve => setTimeout(resolve, 1500)); 
 
-    if (!currentCallCenter) {
-      toast({ title: "Error", description: "No call center selected.", variant: "destructive"});
+    if (!currentCallCenter || !currentUser) {
+      toast({ title: "Error", description: "No call center selected or user not logged in.", variant: "destructive"});
       setIsLoading(false);
       return;
     }
@@ -167,15 +168,34 @@ export default function BotGenerationPage() {
         name: `${data.botNamePrefix || selectedCampaign.name.substring(0,5).replace(/\s/g, '') }-${i + 1}`,
         campaignId: selectedCampaign.id,
         agentId: agentIdToUse!,
-        status: "active", // New bots are active by default
+        status: "active", 
         creationDate: new Date().toISOString(),
         callCenterId: currentCallCenter.id, 
         activeDutyStartTime: data.activeDutyStartTime || undefined,
         activeDutyEndTime: data.activeDutyEndTime || undefined,
       });
     }
+    MOCK_BOTS.push(...newBots); // Add to global mock data
     setGeneratedBots(newBots);
+
     if (newBots.length > 0) {
+      addAuditLog({
+        action: "BOTS_GENERATED",
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: {
+            campaignId: selectedCampaign.id,
+            campaignName: selectedCampaign.name,
+            generationType: data.generationType,
+            count: newBots.length,
+            botNamePrefix: data.botNamePrefix,
+            activeDutyStartTime: data.activeDutyStartTime,
+            activeDutyEndTime: data.activeDutyEndTime,
+            generatedBotIds: newBots.map(b => b.id)
+        }
+      });
       toast({ title: "Bots Generated Successfully!", description: `${newBots.length} bot(s) have been created.` });
     } else if(count > 0) { 
       toast({ title: "Bot Generation Issue", description: "No bots were generated. Please check configuration and ensure agents are available for the campaign.", variant: "default"});
@@ -193,7 +213,6 @@ export default function BotGenerationPage() {
   };
   
   const pageLoading = isCallCenterLoading || isAuthLoading;
-
   const isActionDisabled = currentCallCenter?.status === 'inactive' && currentUser?.role !== 'SUPER_ADMIN';
 
   if (pageLoading) {
@@ -394,7 +413,7 @@ export default function BotGenerationPage() {
                     !watchedCampaignId || 
                     (generationType === 'individual' && !watch("agentId")) ||
                     (generationType !== 'individual' && availableAgentsForCampaign.length === 0 && campaigns.length > 0) ||
-                    isActionDisabled // Main disable flag
+                    isActionDisabled 
                 } 
                 className="w-full md:w-auto"
             >

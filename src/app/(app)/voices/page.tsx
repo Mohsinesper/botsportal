@@ -15,12 +15,11 @@ import * as z from "zod";
 import { toast } from "@/hooks/use-toast";
 import type { Voice } from "@/types";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MOCK_VOICES, AVAILABLE_BACKGROUND_NOISES } from "@/lib/mock-data"; 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
+import { MOCK_VOICES } from "@/lib/mock-data";
+import { addAuditLog } from "@/services/audit-log-service";
 
 const voiceSchemaBase = z.object({
   id: z.string().optional(),
@@ -35,15 +34,13 @@ const voiceSchemaBase = z.object({
       return false;
     }
   }, { message: "Settings must be valid JSON or empty"}),
-  backgroundNoise: z.string().optional(),
-  backgroundNoiseVolume: z.coerce.number().min(0).max(100).optional(),
 });
 
 type VoiceFormData = z.infer<typeof voiceSchemaBase>;
 
 export default function VoicesPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
-  const { currentUser, isLoading: isAuthLoading } = useAuth(); // Added currentUser
+  const { currentUser, isLoading: isAuthLoading } = useAuth();
   const [voices, setVoices] = useState<Voice[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
@@ -57,12 +54,8 @@ export default function VoicesPage() {
       name: "", 
       provider: "", 
       settings: "",
-      backgroundNoise: "none",
-      backgroundNoiseVolume: 0,
     },
   });
-
-  const selectedBackgroundNoise = watch("backgroundNoise");
 
   useEffect(() => {
     if (currentCallCenter) {
@@ -87,8 +80,8 @@ export default function VoicesPage() {
   };
 
   const onSubmit = (data: VoiceFormData) => {
-    if (!currentCallCenter) {
-      toast({ title: "Error", description: "No call center selected.", variant: "destructive"});
+    if (!currentCallCenter || !currentUser) {
+      toast({ title: "Error", description: "No call center selected or user not logged in.", variant: "destructive"});
       return;
     }
 
@@ -98,9 +91,9 @@ export default function VoicesPage() {
       provider: data.provider,
       settings: data.settings ? JSON.parse(data.settings) : undefined,
       callCenterId: currentCallCenter.id,
-      backgroundNoise: data.backgroundNoise === "none" ? undefined : data.backgroundNoise,
-      backgroundNoiseVolume: data.backgroundNoise === "none" ? undefined : data.backgroundNoiseVolume,
     };
+
+    const actionType = editingVoice ? "VOICE_UPDATED" : "VOICE_CREATED";
 
     if (editingVoice) {
       const updatedVoices = MOCK_VOICES.map(v => v.id === editingVoice.id ? voiceData : v);
@@ -113,8 +106,18 @@ export default function VoicesPage() {
       setVoices(prev => [...prev, voiceData]);
       toast({ title: "Voice Added", description: `Voice "${voiceData.name}" added.` });
     }
+
+    addAuditLog({
+        action: actionType,
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: { voiceId: voiceData.id, voiceName: voiceData.name, provider: voiceData.provider }
+    });
+
     setIsDialogOpen(false);
-    reset({ name: "", provider: "", settings: "", backgroundNoise: "none", backgroundNoiseVolume: 0 });
+    reset({ name: "", provider: "", settings: "" });
     setEditingVoice(null);
   };
 
@@ -124,16 +127,26 @@ export default function VoicesPage() {
       name: voice.name,
       provider: voice.provider,
       settings: voice.settings ? JSON.stringify(voice.settings, null, 2) : "",
-      backgroundNoise: voice.backgroundNoise || "none",
-      backgroundNoiseVolume: voice.backgroundNoiseVolume || 0,
     });
     setIsDialogOpen(true);
   };
 
   const handleDelete = (id: string) => {
+    const voiceToDelete = voices.find(v => v.id === id);
+    if (!voiceToDelete || !currentUser || !currentCallCenter) return;
+
     const index = MOCK_VOICES.findIndex(v => v.id === id);
     if (index > -1) MOCK_VOICES.splice(index, 1);
     setVoices(voices.filter(v => v.id !== id));
+    
+    addAuditLog({
+        action: "VOICE_DELETED",
+        userId: currentUser.id,
+        userName: currentUser.name || currentUser.email,
+        callCenterId: currentCallCenter.id,
+        callCenterName: currentCallCenter.name,
+        details: { voiceId: voiceToDelete.id, voiceName: voiceToDelete.name }
+    });
     toast({ title: "Voice Deleted", variant: "destructive" });
   };
   
@@ -185,7 +198,7 @@ export default function VoicesPage() {
         <h2 className="text-3xl font-bold tracking-tight">Voice Management ({currentCallCenter.name})</h2>
         <Button onClick={() => { 
           setEditingVoice(null); 
-          reset({ name: "", provider: "", settings: "", backgroundNoise: "none", backgroundNoiseVolume: 0 }); 
+          reset({ name: "", provider: "", settings: ""}); 
           setIsDialogOpen(true); 
         }}
         disabled={isActionDisabled}
@@ -212,7 +225,7 @@ export default function VoicesPage() {
         setIsDialogOpen(isOpen);
         if (!isOpen) {
           setEditingVoice(null);
-          reset({ name: "", provider: "", settings: "", backgroundNoise: "none", backgroundNoiseVolume: 0 });
+          reset({ name: "", provider: "", settings: ""});
         }
       }}>
         <DialogContent className="sm:max-w-md">
@@ -242,42 +255,6 @@ export default function VoicesPage() {
               />
               {errors.settings && <p className="text-sm text-destructive mt-1">{errors.settings.message}</p>}
             </div>
-             <div>
-                <Label htmlFor="backgroundNoise">Background Noise</Label>
-                <Controller
-                    name="backgroundNoise"
-                    control={control}
-                    render={({ field }) => (
-                        <Select onValueChange={field.onChange} value={field.value || "none"}>
-                            <SelectTrigger id="backgroundNoise" className="mt-1"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                {AVAILABLE_BACKGROUND_NOISES.map(noise => (
-                                    <SelectItem key={noise.id} value={noise.id}>{noise.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                />
-            </div>
-            {selectedBackgroundNoise && selectedBackgroundNoise !== "none" && (
-                 <div>
-                    <Label htmlFor="backgroundNoiseVolume">Noise Volume ({watch("backgroundNoiseVolume") || 0}%)</Label>
-                    <Controller
-                        name="backgroundNoiseVolume"
-                        control={control}
-                        render={({ field: { onChange, value, ...fieldProps }}) => (
-                            <Slider
-                                id="backgroundNoiseVolume"
-                                min={0} max={100} step={5}
-                                value={[value || 0]}
-                                onValueChange={(val) => onChange(val[0])}
-                                className="mt-1"
-                                {...fieldProps}
-                            />
-                        )}
-                    />
-                </div>
-            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
               <Button type="submit">{editingVoice ? "Save Changes" : "Add Voice"}</Button>
@@ -329,7 +306,7 @@ export default function VoicesPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead>Settings Preview</TableHead>
-                <TableHead>Background Noise</TableHead>
+                {/* Removed Background Noise column */}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -341,11 +318,7 @@ export default function VoicesPage() {
                   <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">
                     {voice.settings ? JSON.stringify(voice.settings) : "N/A"}
                   </TableCell>
-                  <TableCell className="text-xs">
-                     {voice.backgroundNoise ? 
-                        `${AVAILABLE_BACKGROUND_NOISES.find(n => n.id === voice.backgroundNoise)?.name || voice.backgroundNoise} (${voice.backgroundNoiseVolume || 0}%)` 
-                        : "None"}
-                  </TableCell>
+                  {/* Removed Background Noise cell */}
                   <TableCell className="text-right">
                      <Button variant="ghost" size="icon" onClick={() => handlePlayVoice(voice.name)} className="mr-1" aria-label="Play voice">
                         <Volume2 className="h-4 w-4" />
@@ -360,7 +333,7 @@ export default function VoicesPage() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center h-24">
+                  <TableCell colSpan={4} className="text-center h-24"> {/* Colspan changed from 5 to 4 */}
                      {voices.length === 0 ? "No voices configured for this call center yet." : "No voices match your current filters."}
                   </TableCell>
                 </TableRow>
