@@ -356,7 +356,7 @@ export default function BotTrackingPage() {
                         checked={isAllFilteredBotsSelected}
                         onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
                         aria-label="Select all filtered bots"
-                        indeterminate={isSomeFilteredBotsSelected}
+                        indeterminate={isSomeFilteredBotsSelected ? true : undefined}
                       />
                   </TableHead>
                   <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-muted/50 transition-colors">

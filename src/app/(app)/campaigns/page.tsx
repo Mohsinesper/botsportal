@@ -27,8 +27,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MOCK_CAMPAIGNS } from "@/lib/mock-data"; 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { addAuditLog } from "@/services/audit-log-service";
-import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
-import { parseISO } from "date-fns"; // Added for date sorting
+import { Checkbox } from "@/components/ui/checkbox"; 
+import { parseISO } from "date-fns"; 
 
 type SortableCampaignKey = keyof Campaign | 'callFlowsCount' | 'createdDateFormatted';
 type SortDirection = "asc" | "desc";
@@ -622,7 +622,7 @@ export default function CampaignsPage() {
                         checked={isAllFilteredCampaignsSelected}
                         onCheckedChange={(checked) => handleSelectAllCampaigns(Boolean(checked))}
                         aria-label="Select all filtered campaigns"
-                        indeterminate={isSomeFilteredCampaignsSelected}
+                        indeterminate={isSomeFilteredCampaignsSelected ? true : undefined}
                     />
                   </TableHead>
                   <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-muted/50 transition-colors">
@@ -714,3 +714,4 @@ export default function CampaignsPage() {
     </div>
   );
 }
+
