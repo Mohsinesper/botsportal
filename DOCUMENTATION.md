@@ -1,6 +1,6 @@
 # Project Overview
 
-This project is a web application built using Next.js and TypeScript, designed to provide AI-powered solutions for modernizing and optimizing call center operations. The application leverages artificial intelligence for a range of functionalities, including:
+This project is a web application built using Next.js and TypeScript, designed to provide AI-powered solutions for modernizing and optimizing call center operations. The application, Esper AI Call Center, leverages artificial intelligence for a range of functionalities, including:
 
 *   **Bot Generation:** Creating and managing automated bots for various call center tasks.
 *   **Agent Optimization:** Providing tools and insights to improve agent performance and efficiency.

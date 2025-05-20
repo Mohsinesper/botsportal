@@ -3,8 +3,8 @@ import { MetadataRoute } from 'next'
  
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'CallFlowAI',
-    short_name: 'CallFlowAI',
+    name: 'Esper AI Call Center',
+    short_name: 'Esper AI',
     description: 'AI-Powered Call Center Optimization Platform',
     start_url: '/',
     display: 'standalone',

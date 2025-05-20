@@ -1,4 +1,4 @@
-# Firebase Studio
+# Esper AI Call Center
 
 This is a NextJS starter in Firebase Studio.
 

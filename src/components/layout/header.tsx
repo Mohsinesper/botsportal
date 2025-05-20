@@ -48,7 +48,7 @@ export function Header() {
   const [callCenterSearch, setCallCenterSearch] = React.useState("");
 
   const currentNavItem = NAV_ITEMS.find(item => item.match ? item.match(pathname) : (item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)));
-  const pageTitle = currentNavItem ? currentNavItem.label : "CallFlowAI";
+  const pageTitle = currentNavItem ? currentNavItem.label : "Esper AI Call Center";
 
 
   const handleCallCenterChange = (callCenterId: string) => {

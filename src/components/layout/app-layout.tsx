@@ -31,7 +31,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <Link href="/" className="flex items-center gap-2">
             <Logo className="h-7 w-7 text-primary" />
             <h1 className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">
-              CallFlowAI
+              Esper AI
             </h1>
           </Link>
         </SidebarHeader>

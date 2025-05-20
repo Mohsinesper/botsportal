@@ -14,7 +14,7 @@ import { Toaster } from "@/components/ui/toaster";
 // });
 
 export const metadata: Metadata = {
-  title: 'CallFlowAI',
+  title: 'Esper AI Call Center',
   description: 'AI-Powered Call Center Optimization Platform',
 };
 
@@ -33,4 +33,3 @@ export default function RootLayout({
     </html>
   );
 }
-
