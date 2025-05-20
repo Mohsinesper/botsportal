@@ -16,30 +16,30 @@ import type { CallFlow, CallFlowStep, CallFlowVoiceSettings } from '@/types';
 
 // Define Zod schemas for the CallFlow structure for AI output validation
 // These are NOT exported directly from a "use server" file.
-const CallFlowVoiceSettingsSchema = z.object({
+const CallFlowVoiceSettingsSchemaInternal = z.object({
   stability: z.number(),
   similarity_boost: z.number(),
 });
 
-const CallFlowStepConditionSchema = z.object({
+const CallFlowStepConditionSchemaInternal = z.object({
   type: z.string(),
   keywords: z.array(z.string()).optional(),
   next: z.string(),
 });
 
-const CallFlowStepSchema = z.object({
+const CallFlowStepSchemaInternal = z.object({
   description: z.string(),
   audio_file: z.string().describe("Placeholder audio file name, e.g., 'step_name.wav'"),
   wait_for_response: z.boolean().describe("Infer if the step expects user input"),
   timeout: z.number().optional().describe("Timeout in seconds if waiting for response, e.g., 10"),
   next: z.string().optional().describe("Key of the next step if no conditions"),
-  conditions: z.array(CallFlowStepConditionSchema).optional().describe("Conditions for branching"),
+  conditions: z.array(CallFlowStepConditionSchemaInternal).optional().describe("Conditions for branching"),
   text: z.string().describe("The actual script text for this step"),
-  voice_settings: CallFlowVoiceSettingsSchema.optional().default({ stability: 0.5, similarity_boost: 0.75 }),
+  voice_settings: CallFlowVoiceSettingsSchemaInternal.optional().default({ stability: 0.5, similarity_boost: 0.75 }),
 });
 
 // This schema is for the AI to return the 'steps' part of ONE call flow.
-const AiGeneratedStepsSchema = z.record(CallFlowStepSchema);
+const AiGeneratedStepsSchemaInternal = z.record(CallFlowStepSchemaInternal);
 
 
 const GenerateStructuredCallFlowsInputSchema = z.object({
@@ -47,7 +47,6 @@ const GenerateStructuredCallFlowsInputSchema = z.object({
   campaignName: z.string().describe("Name of the campaign, used for naming call flows."),
   campaignDescription: z.string().describe("Description of the campaign, used in call flow JSON."),
   variantCount: z.number().int().min(0).max(5).describe("Number of textual variants to generate from the master script. 0 means only master."),
-  // tone: z.string().optional().describe("Optional tone to guide AI for variant generation, e.g., Professional, Friendly."),
 });
 export type GenerateStructuredCallFlowsInput = z.infer<typeof GenerateStructuredCallFlowsInputSchema>;
 
@@ -57,21 +56,22 @@ const GenerateStructuredCallFlowsOutputSchema = z.object({
       name: z.string(),
       description: z.string(),
       default_exit: z.string(),
-      steps: z.record(CallFlowStepSchema), // Reusing the step schema
+      steps: z.record(CallFlowStepSchemaInternal), 
     })
   ).describe("An array of generated CallFlow JSON objects, starting with the master.")
 });
 export type GenerateStructuredCallFlowsOutput = z.infer<typeof GenerateStructuredCallFlowsOutputSchema>;
 
 
-export async function generateStructuredCallFlows(input: GenerateStructuredCallFlowsInput): Promise<GenerateStructuredCallFlowsOutput> {
-  const allCallFlows: CallFlow[] = [];
+export async function generateStructuredCallFlows(input: GenerateStructuredCallFlowsInput): Promise<GenerateStructuredCallFlowsOutput | { error: string }> {
+  try {
+    const allCallFlows: CallFlow[] = [];
 
-  // 1. Generate textual variants (if any)
-  let variantTexts: string[] = [];
-  if (input.variantCount > 0) {
-    const variantGenResult = await ai.generate({
-      prompt: `You are an expert script writer. The user has provided the following master script. Generate ${input.variantCount} distinct textual variations of this master script.
+    // 1. Generate textual variants (if any)
+    let variantTexts: string[] = [];
+    if (input.variantCount > 0) {
+      const variantGenResult = await ai.generate({
+        prompt: `You are an expert script writer. The user has provided the following master script. Generate ${input.variantCount} distinct textual variations of this master script.
 Each variant should maintain the core message and objective of the master script but use different phrasing, emphasis, or style.
 Focus only on generating the variant script texts. Do not add any extra formatting or commentary.
 Return each variant separated by '||VARIANT_SEPARATOR||'.
@@ -79,30 +79,30 @@ Return each variant separated by '||VARIANT_SEPARATOR||'.
 Master Script:
 ${input.userMasterScript}
 `,
-      config: { temperature: 0.7 }
-    });
-    const rawVariants = variantGenResult.text?.split('||VARIANT_SEPARATOR||').map(v => v.trim()).filter(v => v) || [];
-    if (rawVariants.length !== input.variantCount) {
-        console.warn(`AI generated ${rawVariants.length} variants, expected ${input.variantCount}. Using what was generated.`);
+        config: { temperature: 0.7 }
+      });
+      const rawVariants = variantGenResult.text?.split('||VARIANT_SEPARATOR||').map(v => v.trim()).filter(v => v) || [];
+      if (rawVariants.length !== input.variantCount) {
+          console.warn(`AI generated ${rawVariants.length} variants, expected ${input.variantCount}. Using what was generated.`);
+      }
+      variantTexts = rawVariants;
     }
-    variantTexts = rawVariants;
-  }
 
-  const scriptsToProcess = [input.userMasterScript, ...variantTexts];
-  
-  // 2. For master script and each textual variant, convert to structured JSON steps
-  for (let i = 0; i < scriptsToProcess.length; i++) {
-    const currentScriptText = scriptsToProcess[i];
-    const isMaster = i === 0;
+    const scriptsToProcess = [input.userMasterScript, ...variantTexts];
     
-    const structurePrompt = ai.definePrompt({
-        name: `structureScriptPrompt_${i}`, // Unique name for each prompt instance if needed, or just rely on dynamic generation
-        input: { schema: z.object({ scriptText: z.string() }) },
-        output: { 
-          schema: AiGeneratedStepsSchema,
-          format: 'json' // Explicitly request JSON format
-        },
-        prompt: `You are an expert in call center script design. Convert the following call script text into a structured JSON object representing the steps of a call flow.
+    // 2. For master script and each textual variant, convert to structured JSON steps
+    for (let i = 0; i < scriptsToProcess.length; i++) {
+      const currentScriptText = scriptsToProcess[i];
+      const isMaster = i === 0;
+      
+      const structurePrompt = ai.definePrompt({
+          name: `structureScriptPrompt_flow_${Date.now()}_${i}`, 
+          input: { schema: z.object({ scriptText: z.string() }) },
+          output: { 
+            schema: AiGeneratedStepsSchemaInternal,
+            format: 'json' 
+          },
+          prompt: `You are an expert in call center script design. Convert the following call script text into a structured JSON object representing the steps of a call flow.
 Identify logical steps within the provided script. Assign them meaningful keys (e.g., 'greeting', 'qualification_question', 'positive_outcome', 'negative_outcome', 'voicemail', 'exit').
 For each step, provide:
 - "description": A brief description of the step's purpose.
@@ -127,80 +127,94 @@ The main goal is to get the text segmented correctly into steps. Conditional log
 Example of a step key: "greeting_step", "ask_medicare_parts", "qualification_confirmed", "transfer_to_agent", "voicemail_message", "end_call".
 Ensure there is a clear 'default_exit' step defined.
 `,
-        config: { temperature: 0.3 } // Lower temperature for more predictable structuring
-    });
-
-    const { output: structuredSteps } = await structurePrompt({ scriptText: currentScriptText });
-
-    if (!structuredSteps) {
-      console.error(`Failed to structure script text for ${isMaster ? 'master' : `variant ${i}`}. Skipping this script.`);
-      // Potentially, we could just put the raw text into a single step as a fallback
-      const fallbackStepKey = "main_content";
-      const fallbackSteps: Record<string, CallFlowStep> = {
-        [fallbackStepKey]: {
-          description: "Main content of the script",
-          audio_file: `${fallbackStepKey}.wav`,
-          wait_for_response: false,
-          text: currentScriptText,
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-          next: "final_exit"
-        },
-        "final_exit": {
-          description: "End of call",
-          audio_file: "final_exit.wav",
-          wait_for_response: false,
-          text: "Thank you. Goodbye."
-        }
-      };
-       allCallFlows.push({
-        name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i+1}`, // Variant numbering starts from 1
-        description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i+1})`),
-        default_exit: "final_exit", // Fallback
-        steps: fallbackSteps,
+          config: { temperature: 0.3 } 
       });
-      continue;
+
+      const { output: structuredSteps, finishReason, details } = await structurePrompt({ scriptText: currentScriptText });
+
+      if (!structuredSteps || finishReason !== 'STOP' && finishReason !== 'FINISH') {
+        console.error(`Failed to structure script text for ${isMaster ? 'master' : `variant ${i}`}. Finish Reason: ${finishReason}, Details: ${JSON.stringify(details)}. Skipping this script.`);
+        const fallbackStepKey = "main_content";
+        const fallbackSteps: Record<string, CallFlowStep> = {
+          [fallbackStepKey]: {
+            description: "Main content of the script (AI structuring failed)",
+            audio_file: `${fallbackStepKey}.wav`,
+            wait_for_response: false,
+            text: currentScriptText, // Store raw script if structuring fails
+            voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            next: "final_exit"
+          },
+          "final_exit": {
+            description: "End of call (fallback)",
+            audio_file: "final_exit.wav",
+            wait_for_response: false,
+            text: "Thank you. Goodbye."
+          }
+        };
+         allCallFlows.push({
+          name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i+1}`, 
+          description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i+1}) - AI structuring fallback`),
+          default_exit: "final_exit", 
+          steps: fallbackSteps,
+        });
+        continue;
+      }
+      
+      let defaultExitKey = "graceful_exit"; 
+      if (!structuredSteps[defaultExitKey] && Object.keys(structuredSteps).includes("exit")) {
+          defaultExitKey = "exit"; 
+      } else if (!structuredSteps[defaultExitKey] && !Object.keys(structuredSteps).includes("exit")) {
+          if (!structuredSteps["final_exit"]) {
+               structuredSteps["final_exit"] = {
+                  description: "Standard Call Exit - Final",
+                  audio_file: "final_exit.wav",
+                  wait_for_response: false,
+                  text: "Thank you for your time. Goodbye."
+              };
+          }
+          defaultExitKey = Object.keys(structuredSteps).find(key => structuredSteps[key].next === undefined && (!structuredSteps[key].conditions || structuredSteps[key].conditions?.length === 0) && key.toLowerCase().includes("exit")) || "final_exit";
+
+          if(!structuredSteps[defaultExitKey]){ 
+              defaultExitKey = "standard_exit_placeholder";
+              structuredSteps[defaultExitKey] = {
+                  description: "Standard Call Exit",
+                  audio_file: "standard_exit_placeholder.wav",
+                  wait_for_response: false,
+                  text: "Thank you for your time. Goodbye."
+              };
+          }
+      }
+
+      allCallFlows.push({
+        name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i+1}`, 
+        description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i+1})`),
+        default_exit: defaultExitKey,
+        steps: structuredSteps as Record<string, CallFlowStep>, 
+      });
     }
-    
-    // Try to find a default exit from the generated steps, or add one
-    let defaultExitKey = "graceful_exit"; // A common convention
-    if (!structuredSteps[defaultExitKey] && Object.keys(structuredSteps).includes("exit")) {
-        defaultExitKey = "exit"; // Fallback if 'graceful_exit' is not found but 'exit' is.
-    } else if (!structuredSteps[defaultExitKey] && !Object.keys(structuredSteps).includes("exit")) {
-        // If neither common exit key is found, create a basic one.
-        // Also, ensure 'final_exit' (or a similar ultimate exit) is present if others point to it.
-        if (!structuredSteps["final_exit"]) {
-             structuredSteps["final_exit"] = {
-                description: "Standard Call Exit - Final",
-                audio_file: "final_exit.wav",
-                wait_for_response: false,
-                text: "Thank you for your time. Goodbye."
-            };
-        }
-        defaultExitKey = Object.keys(structuredSteps).find(key => structuredSteps[key].next === undefined && (!structuredSteps[key].conditions || structuredSteps[key].conditions?.length === 0) && key.toLowerCase().includes("exit")) || "final_exit";
 
-        if(!structuredSteps[defaultExitKey]){ // If still not found, create a generic one
-            defaultExitKey = "standard_exit_placeholder";
-            structuredSteps[defaultExitKey] = {
-                description: "Standard Call Exit",
-                audio_file: "standard_exit_placeholder.wav",
-                wait_for_response: false,
-                text: "Thank you for your time. Goodbye."
-            };
+    return { generatedCallFlows: allCallFlows };
+
+  } catch (error) {
+    console.error("Error in generateStructuredCallFlows:", error);
+    let errorMessage = "An unexpected error occurred during script generation.";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    if (typeof error === 'object' && error !== null) {
+        if ('details' in error) {
+            console.error("Genkit error details in flow:", (error as any).details);
+        }
+        if ('finishReason' in error && (error as any).finishReason === 'SAFETY') {
+            errorMessage = "Script generation was blocked due to safety settings. Please revise your script.";
         }
     }
-
-
-    allCallFlows.push({
-      name: isMaster ? input.campaignName : `${input.campaignName} - Variant ${i+1}`, // Variant numbering from 1
-      description: input.campaignDescription + (isMaster ? "" : ` (Variant ${i+1})`),
-      default_exit: defaultExitKey,
-      steps: structuredSteps as Record<string, CallFlowStep>, // Cast needed as AI output schema is generic Record
-    });
+    return { error: errorMessage };
   }
-
-  return { generatedCallFlows: allCallFlows };
 }
 
 // This flow is now defined within the generateStructuredCallFlows function for simplicity,
 // but could be a separate ai.defineFlow if complex pre/post-processing were needed per script.
 // const structureScriptFlow = ai.defineFlow( ... );
+
+
