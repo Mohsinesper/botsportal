@@ -3,7 +3,7 @@
 
 import type { CallCenter } from "@/types";
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { MOCK_GLOBAL_CALL_CENTERS } from "@/lib/mock-data";
+import { MOCK_GLOBAL_CALL_CENTERS, MOCK_BOTS } from "@/lib/mock-data"; // Import MOCK_BOTS
 import { useAuth } from "./AuthContext";
 
 interface CallCenterContextType {
@@ -209,7 +209,7 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem(CURRENT_CALL_CENTER_ID_STORAGE_KEY, userAccessibleCenters[0].id);
     }
 
-  }, [allCallCentersState, currentUser, isAuthLoading, isLoading]);
+  }, [allCallCentersState, currentUser, isAuthLoading, isLoading, currentCallCenter]);
 
 
   const updateCallCenterBillingConfig = (
@@ -236,6 +236,8 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
   ): CallCenter | undefined => {
     if (currentUser?.role !== "SUPER_ADMIN") return undefined;
     let updatedCenter: CallCenter | undefined = undefined;
+    
+    // Update Call Center status
     setAllCallCentersState(prevAll => {
       const newAll = prevAll.map(cc => {
         if (cc.id === callCenterId) {
@@ -246,6 +248,20 @@ export const CallCenterProvider = ({ children }: { children: ReactNode }) => {
       });
       return newAll;
     });
+
+    // If call center is set to inactive, update associated bots
+    if (status === "inactive") {
+      MOCK_BOTS.forEach(bot => {
+        if (bot.callCenterId === callCenterId) {
+          bot.status = "inactive"; 
+        }
+      });
+      // In a real app, you'd also need to trigger an update to the component
+      // that displays bots if it's currently rendered and showing these bots.
+      // For this mock setup, MOCK_BOTS is modified directly.
+      // If BotTrackingPage is open, it might need a way to re-fetch or re-filter.
+    }
+    
     return updatedCenter;
   };
 
@@ -274,3 +290,4 @@ export const useCallCenter = () => {
   }
   return context;
 };
+

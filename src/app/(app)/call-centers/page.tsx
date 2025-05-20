@@ -96,10 +96,14 @@ export default function CallCentersPage() {
   const handleStatusToggle = (centerId: string, currentStatus: CallCenter['status']) => {
     if (currentUser?.role !== "SUPER_ADMIN") return;
     const newStatus = currentStatus === "active" ? "inactive" : "active";
-    updateCallCenterStatus(centerId, newStatus);
-    toast({ title: "Status Updated", description: `Call center status changed to ${newStatus}.`});
-    // Note: "bots functionality respectively" part is complex and not implemented in this pass.
-    // This would typically involve cascading status changes to bots or other related entities.
+    const updatedCenter = updateCallCenterStatus(centerId, newStatus);
+    if (updatedCenter) {
+      let toastDescription = `Call center "${updatedCenter.name}" status changed to ${newStatus}.`;
+      if (newStatus === "inactive") {
+        toastDescription += " Associated bots have also been set to inactive.";
+      }
+      toast({ title: "Status Updated", description: toastDescription});
+    }
   };
 
   const isLoading = isCallCenterLoading || isAuthLoading;
@@ -300,3 +304,4 @@ export default function CallCentersPage() {
     </div>
   );
 }
+
