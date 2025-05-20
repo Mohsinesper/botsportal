@@ -1,7 +1,7 @@
 
 import { MOCK_INVOICES as initialInvoices, MOCK_GLOBAL_CALL_CENTERS } from './mock-data';
 import type { Invoice, InvoiceStatus, CallCenter, BillingRateType, InvoiceLineItem } from '@/types';
-import { format, getMonth, getYear } from 'date-fns';
+import { format, getMonth, getYear, startOfMonth, endOfDay, differenceInCalendarDays } from 'date-fns';
 
 let invoices: Invoice[] = [...initialInvoices]; // Make a mutable copy
 
@@ -40,25 +40,28 @@ const calculateMockUsage = (callCenter: CallCenter, periodStart: Date, periodEnd
   const mockBotCount = Math.floor(Math.random() * 50) + 10; // 10-59 bots
   let quantity = 0;
   let description = "";
-  const daysInPeriod = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 3600 * 24)) +1; // +1 to include end date
+  // Calculate days in period, ensuring it's at least 1
+  const daysInPeriod = Math.max(1, differenceInCalendarDays(endOfDay(periodEnd), startOfMonth(periodStart)) + 1);
+  const periodFormatted = format(periodStart, "MMMM yyyy");
+
 
   switch (billingConfig.rateType) {
     case "per_call":
-      quantity = mockBotCount * (Math.floor(Math.random() * 500) + 1000); // 1000-1499 calls per bot
-      description = `Per Call Usage (${quantity} calls at ${billingConfig.amount} ${billingConfig.currency} each for ${format(periodStart, "MMM yyyy")})`;
+      quantity = mockBotCount * (Math.floor(Math.random() * 500) + 1000); // 1000-1499 calls per bot for the period
+      description = `Per Call Usage (${quantity} calls at ${billingConfig.amount} ${billingConfig.currency} each for ${periodFormatted})`;
       break;
     case "per_hour":
       quantity = mockBotCount * daysInPeriod * (Math.floor(Math.random() * 4) + 4); // 4-7 active hours per day per bot
-      description = `Per Hour Usage (${quantity} hours at ${billingConfig.amount} ${billingConfig.currency} each for ${format(periodStart, "MMM yyyy")})`;
+      description = `Per Hour Usage (${quantity} hours at ${billingConfig.amount} ${billingConfig.currency} each for ${periodFormatted})`;
       break;
     case "per_day":
       quantity = mockBotCount * daysInPeriod;
-      description = `Per Day Usage (${quantity} bot-days at ${billingConfig.amount} ${billingConfig.currency} each for ${format(periodStart, "MMM yyyy")})`;
+      description = `Per Day Usage (${quantity} bot-days at ${billingConfig.amount} ${billingConfig.currency} each for ${periodFormatted})`;
       break;
     case "per_month":
       // Assuming period is roughly a month for simplicity
       quantity = mockBotCount; 
-      description = `Per Month Usage (${quantity} bots at ${billingConfig.amount} ${billingConfig.currency} each for ${format(periodStart, "MMM yyyy")})`;
+      description = `Monthly Service Fee for ${mockBotCount} Bots (${billingConfig.amount} ${billingConfig.currency}/bot) for ${periodFormatted}`;
       break;
     default:
       return [];
@@ -86,7 +89,6 @@ export const generateNewInvoice = (callCenterId: string, issueDate: Date, dueDat
   if (!callCenter) return { error: "Call center not found." };
   if (!callCenter.billingConfig) return { error: "Call center has no billing configuration."};
 
-  // Check for existing invoice for the same month and year for this call center
   const issueMonth = getMonth(issueDate);
   const issueYear = getYear(issueDate);
 
@@ -100,8 +102,8 @@ export const generateNewInvoice = (callCenterId: string, issueDate: Date, dueDat
     return { error: `An invoice for ${format(issueDate, "MMMM yyyy")} already exists for ${callCenter.name}. Invoice #: ${existingInvoiceForPeriod.invoiceNumber}` };
   }
 
-  const periodStart = new Date(issueDate.getFullYear(), issueDate.getMonth(), 1); 
-  const periodEnd = new Date(issueDate.getFullYear(), issueDate.getMonth() + 1, 0); // Last day of the issue month
+  const periodStart = startOfMonth(issueDate);
+  const periodEnd = endOfDay(new Date(issueYear, issueMonth + 1, 0)); // Last day of the issue month
 
 
   const items = calculateMockUsage(callCenter, periodStart, periodEnd); 
@@ -109,10 +111,17 @@ export const generateNewInvoice = (callCenterId: string, issueDate: Date, dueDat
   
   const { subtotal, taxAmount, total } = calculateTotals(items);
 
+  const invoicesForMonthAndYear = invoices.filter(inv => 
+    inv.callCenterId === callCenterId && 
+    getYear(new Date(inv.issueDate)) === issueYear &&
+    getMonth(new Date(inv.issueDate)) === issueMonth
+  ).length;
+  const sequentialNumber = String(invoicesForMonthAndYear + 1).padStart(3, '0'); // Pad to 3 digits e.g., 001
+
   const newInvoice: Invoice = {
     id: `inv-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
     callCenterId,
-    invoiceNumber: `INV-${issueYear}-${String(issueMonth + 1).padStart(2, '0')}-${String(invoices.filter(inv=>inv.callCenterId === callCenterId).length + 1).padStart(2, '0')}`,
+    invoiceNumber: `INV-${issueYear}-${String(issueMonth + 1).padStart(2, '0')}-${sequentialNumber}`,
     issueDate: issueDate.toISOString(),
     dueDate: dueDate.toISOString(),
     items,
@@ -141,4 +150,3 @@ export const updateCallCenterBillingConfigInMock = (
   }
   return undefined;
 };
-
