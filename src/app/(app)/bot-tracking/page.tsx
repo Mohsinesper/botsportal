@@ -6,20 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { Bot, Campaign, Agent, Voice, ScriptVariant } from "@/types";
+import type { Bot, Campaign, Agent, Voice } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, FilterX, PhoneCall, MoreHorizontal, Play, Pause, PowerOff } from "lucide-react";
+import { CalendarIcon, FilterX, PhoneCall, MoreHorizontal, Play, Pause, PowerOff, ArrowUpDown, CheckSquare, Square } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { useCallCenter } from "@/contexts/CallCenterContext";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 import { MOCK_CAMPAIGNS, MOCK_AGENTS, MOCK_VOICES, MOCK_BOTS } from "@/lib/mock-data";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 
+type SortableBotKey = keyof Bot | 'campaignName' | 'agentName';
+type SortDirection = "asc" | "desc";
 
 export default function BotTrackingPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
@@ -35,6 +38,10 @@ export default function BotTrackingPage() {
   const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
   const [creationDate, setCreationDate] = useState<Date | undefined>(undefined);
 
+  const [selectedBotIds, setSelectedBotIds] = useState<string[]>([]);
+  const [sortColumn, setSortColumn] = useState<SortableBotKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
   useEffect(() => {
     if (currentCallCenter) {
       setBots(MOCK_BOTS.filter(b => b.callCenterId === currentCallCenter.id));
@@ -48,25 +55,8 @@ export default function BotTrackingPage() {
       setVoices([]);
     }
     resetFilters();
+    setSelectedBotIds([]);
   }, [currentCallCenter]);
-
-  const filteredBots = useMemo(() => {
-    return bots.filter(bot => {
-      const campaign = campaigns.find(c => c.id === bot.campaignId);
-      const agent = agents.find(a => a.id === bot.agentId);
-
-      return (
-        (bot.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-         (campaign && campaign.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-         (agent && agent.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        ) &&
-        (!selectedCampaign || bot.campaignId === selectedCampaign) &&
-        (!selectedAgent || bot.agentId === selectedAgent) &&
-        (!selectedStatus || bot.status === selectedStatus) &&
-        (!creationDate || new Date(bot.creationDate).toDateString() === creationDate.toDateString())
-      );
-    });
-  }, [bots, searchTerm, selectedCampaign, selectedAgent, selectedStatus, creationDate, campaigns, agents]);
 
   const getCampaignName = (id: string) => campaigns.find(c => c.id === id)?.name || "Unknown Campaign";
   
@@ -85,6 +75,60 @@ export default function BotTrackingPage() {
     };
   };
 
+  const filteredAndSortedBots = useMemo(() => {
+    let filtered = bots.filter(bot => {
+      const campaign = campaigns.find(c => c.id === bot.campaignId);
+      const agent = agents.find(a => a.id === bot.agentId);
+
+      return (
+        (bot.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+         (campaign && campaign.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+         (agent && agent.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        ) &&
+        (!selectedCampaign || bot.campaignId === selectedCampaign) &&
+        (!selectedAgent || bot.agentId === selectedAgent) &&
+        (!selectedStatus || bot.status === selectedStatus) &&
+        (!creationDate || new Date(bot.creationDate).toDateString() === creationDate.toDateString())
+      );
+    });
+
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let valA: any;
+        let valB: any;
+
+        if (sortColumn === 'campaignName') {
+          valA = getCampaignName(a.campaignId);
+          valB = getCampaignName(b.campaignId);
+        } else if (sortColumn === 'agentName') {
+          valA = getAgentDetails(a.agentId).agentName;
+          valB = getAgentDetails(b.agentId).agentName;
+        } else {
+          valA = a[sortColumn as keyof Bot];
+          valB = b[sortColumn as keyof Bot];
+        }
+        
+        // Handle undefined or null values by pushing them to the end
+        if (valA == null && valB == null) return 0;
+        if (valA == null) return 1;
+        if (valB == null) return -1;
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortDirection === 'asc' ? valA - valB : valB - valA;
+        } else if (typeof valA === 'string' && typeof valB === 'string') {
+          return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else if (sortColumn === 'creationDate' || sortColumn === 'lastActivity') {
+            const dateA = valA ? parseISO(valA).getTime() : 0;
+            const dateB = valB ? parseISO(valB).getTime() : 0;
+            return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        return 0;
+      });
+    }
+    return filtered;
+  }, [bots, searchTerm, selectedCampaign, selectedAgent, selectedStatus, creationDate, campaigns, agents, sortColumn, sortDirection]);
+
+
   const statusBadgeVariant = (status: Bot["status"]) => {
     switch (status) {
       case "active": return "default";
@@ -100,6 +144,7 @@ export default function BotTrackingPage() {
     setSelectedAgent(undefined);
     setSelectedStatus(undefined);
     setCreationDate(undefined);
+    setSortColumn(null);
   };
 
   const handleMockCall = (bot: Bot) => {
@@ -110,17 +155,53 @@ export default function BotTrackingPage() {
     });
   };
 
-  const handleSetBotStatus = (botId: string, newStatus: Bot["status"]) => {
-    const botIndexGlobal = MOCK_BOTS.findIndex(b => b.id === botId);
-    if (botIndexGlobal !== -1) {
-      MOCK_BOTS[botIndexGlobal].status = newStatus;
-    }
-
-    setBots(prevBots => prevBots.map(b => b.id === botId ? { ...b, status: newStatus } : b));
-    toast({
-      title: "Bot Status Updated",
-      description: `Bot is now ${newStatus}.`,
+  const updateBotStatuses = (botIds: string[], newStatus: Bot["status"]) => {
+    botIds.forEach(botId => {
+      const botIndexGlobal = MOCK_BOTS.findIndex(b => b.id === botId);
+      if (botIndexGlobal !== -1) {
+        MOCK_BOTS[botIndexGlobal].status = newStatus;
+      }
     });
+    if (currentCallCenter) { // Refresh local state
+        setBots(MOCK_BOTS.filter(b => b.callCenterId === currentCallCenter.id));
+    }
+    toast({
+      title: "Bot Statuses Updated",
+      description: `${botIds.length} bot(s) are now ${newStatus}.`,
+    });
+    setSelectedBotIds([]); // Clear selection
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedBotIds(filteredAndSortedBots.map(bot => bot.id));
+    } else {
+      setSelectedBotIds([]);
+    }
+  };
+
+  const handleSelectBot = (botId: string, checked: boolean) => {
+    setSelectedBotIds(prev => 
+      checked ? [...prev, botId] : prev.filter(id => id !== botId)
+    );
+  };
+
+  const handleSort = (columnKey: SortableBotKey) => {
+    if (sortColumn === columnKey) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(columnKey);
+      setSortDirection('asc');
+    }
+  };
+
+  const renderSortIcon = (columnKey: SortableBotKey) => {
+    if (sortColumn !== columnKey) {
+      return <ArrowUpDown className="ml-2 h-4 w-4 opacity-30" />;
+    }
+    return sortDirection === 'asc' ? 
+      <ArrowUpDown className="ml-2 h-4 w-4 text-primary transform rotate-0" /> : 
+      <ArrowUpDown className="ml-2 h-4 w-4 text-primary transform rotate-180" />;
   };
   
   if (isCallCenterLoading) {
@@ -166,6 +247,9 @@ export default function BotTrackingPage() {
       </div>
     );
   }
+
+  const isAllFilteredBotsSelected = filteredAndSortedBots.length > 0 && selectedBotIds.length === filteredAndSortedBots.length;
+  const isSomeFilteredBotsSelected = selectedBotIds.length > 0 && selectedBotIds.length < filteredAndSortedBots.length;
 
 
   return (
@@ -241,40 +325,91 @@ export default function BotTrackingPage() {
         </CardContent>
       </Card>
 
+      {selectedBotIds.length > 0 && (
+        <Card className="shadow-md">
+          <CardHeader className="pb-2 pt-3">
+            <CardTitle className="text-base">
+              {selectedBotIds.length} bot(s) selected
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Button size="sm" onClick={() => updateBotStatuses(selectedBotIds, "active")}>Set Active</Button>
+            <Button size="sm" variant="secondary" onClick={() => updateBotStatuses(selectedBotIds, "inactive")}>Set Inactive</Button>
+            <Button size="sm" variant="destructive" onClick={() => updateBotStatuses(selectedBotIds, "error")}>Set Error (Mock)</Button>
+            <Button size="sm" variant="outline" onClick={() => setSelectedBotIds([])}>Clear Selection</Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="shadow-lg">
         <CardHeader>
             <CardTitle>Bot List</CardTitle>
-            <CardDescription>Showing {filteredBots.length} of {bots.length} bots for {currentCallCenter.name}.</CardDescription>
+            <CardDescription>Showing {filteredAndSortedBots.length} of {bots.length} bots for {currentCallCenter.name}.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bot Name</TableHead>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Agent Config</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Creation Date</TableHead>
-                  <TableHead>Last Activity</TableHead>
-                  <TableHead className="text-right">Total Calls</TableHead>
-                  <TableHead className="text-right">Successful</TableHead>
-                  <TableHead className="text-right">Failed</TableHead>
-                  <TableHead className="text-right">Busy</TableHead>
+                  <TableHead className="w-[50px]">
+                     <Checkbox
+                        checked={isAllFilteredBotsSelected}
+                        onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+                        aria-label="Select all filtered bots"
+                        indeterminate={isSomeFilteredBotsSelected}
+                      />
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center">Bot Name {renderSortIcon('name')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('campaignName')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                     <div className="flex items-center">Campaign {renderSortIcon('campaignName')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('agentName')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center">Agent Config {renderSortIcon('agentName')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('status')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center">Status {renderSortIcon('status')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('creationDate')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                     <div className="flex items-center">Creation Date {renderSortIcon('creationDate')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('lastActivity')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                     <div className="flex items-center">Last Activity {renderSortIcon('lastActivity')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('totalCalls')} className="cursor-pointer hover:bg-muted/50 transition-colors text-right">
+                    <div className="flex items-center justify-end">Total Calls {renderSortIcon('totalCalls')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('successfulCalls')} className="cursor-pointer hover:bg-muted/50 transition-colors text-right">
+                    <div className="flex items-center justify-end">Successful {renderSortIcon('successfulCalls')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('failedCalls')} className="cursor-pointer hover:bg-muted/50 transition-colors text-right">
+                    <div className="flex items-center justify-end">Failed {renderSortIcon('failedCalls')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('busyCalls')} className="cursor-pointer hover:bg-muted/50 transition-colors text-right">
+                    <div className="flex items-center justify-end">Busy {renderSortIcon('busyCalls')}</div>
+                  </TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredBots.length > 0 ? filteredBots.map((bot) => (
-                  <TableRow key={bot.id}>
+                {filteredAndSortedBots.length > 0 ? filteredAndSortedBots.map((bot) => (
+                  <TableRow key={bot.id} data-state={selectedBotIds.includes(bot.id) ? "selected" : ""}>
+                    <TableCell>
+                       <Checkbox
+                          checked={selectedBotIds.includes(bot.id)}
+                          onCheckedChange={(checked) => handleSelectBot(bot.id, Boolean(checked))}
+                          aria-label={`Select bot ${bot.name}`}
+                        />
+                    </TableCell>
                     <TableCell className="font-medium">{bot.name}</TableCell>
                     <TableCell className="text-muted-foreground">{getCampaignName(bot.campaignId)}</TableCell>
                     <TableCell className="text-muted-foreground">{getAgentDetails(bot.agentId).agentName}</TableCell>
                     <TableCell>
                       <Badge variant={statusBadgeVariant(bot.status)} className="capitalize">{bot.status}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{new Date(bot.creationDate).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-muted-foreground">{bot.lastActivity ? new Date(bot.lastActivity).toLocaleString() : "N/A"}</TableCell>
+                    <TableCell className="text-muted-foreground">{bot.creationDate ? format(parseISO(bot.creationDate), "PP") : "N/A"}</TableCell>
+                    <TableCell className="text-muted-foreground">{bot.lastActivity ? format(parseISO(bot.lastActivity), "Pp") : "N/A"}</TableCell>
                     <TableCell className="text-right font-medium">{bot.totalCalls ?? 0}</TableCell>
                     <TableCell className="text-right text-green-600 dark:text-green-500">{bot.successfulCalls ?? 0}</TableCell>
                     <TableCell className="text-right text-red-600 dark:text-red-500">{bot.failedCalls ?? 0}</TableCell>
@@ -284,42 +419,41 @@ export default function BotTrackingPage() {
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
                             <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Bot Actions</span>
+                            <span className="sr-only">Bot Actions for {bot.name}</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel>Actions for {bot.name}</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => handleMockCall(bot)}>
                             <PhoneCall className="mr-2 h-4 w-4" />
                             Mock Call
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {bot.status !== "active" && (
-                            <DropdownMenuItem onClick={() => handleSetBotStatus(bot.id, "active")}>
+                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "active")}>
                               <Play className="mr-2 h-4 w-4" />
                               Set Active
                             </DropdownMenuItem>
                           )}
                           {bot.status === "active" && (
-                            <DropdownMenuItem onClick={() => handleSetBotStatus(bot.id, "inactive")}>
+                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "inactive")}>
                               <Pause className="mr-2 h-4 w-4" />
                               Set Inactive
                             </DropdownMenuItem>
                           )}
-                           {/* Optionally add an error state toggle if needed for testing */}
-                           {/* {bot.status !== "error" && (
-                            <DropdownMenuItem onClick={() => handleSetBotStatus(bot.id, "error")}>
+                           {bot.status !== "error" && (
+                            <DropdownMenuItem onClick={() => updateBotStatuses([bot.id], "error")}>
                               <PowerOff className="mr-2 h-4 w-4 text-destructive" />
                               Set Error (Mock)
                             </DropdownMenuItem>
-                          )} */}
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center h-24">
+                    <TableCell colSpan={12} className="text-center h-24">
                       {bots.length === 0 ? "No bots found for this call center." : "No bots match your current filters."}
                     </TableCell>
                   </TableRow>
@@ -332,6 +466,5 @@ export default function BotTrackingPage() {
     </div>
   );
 }
-
 
     
