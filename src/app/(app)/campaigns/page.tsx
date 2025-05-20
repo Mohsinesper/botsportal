@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye, FilterX, Search, FileJson, MessageSquare } from "lucide-react";
-import type { Campaign, ScriptVariant, CallFlow, CallFlowStep } from "@/types"; // Added CallFlow types
+import { MoreHorizontal, PlusCircle, Edit2, Trash2, Play, Pause, Archive, Wand2, Loader2, Eye, FilterX, Search, FileJson, MessageSquare, ArrowUpDown, CheckSquare, Square } from "lucide-react";
+import type { Campaign, ScriptVariant, CallFlow, CallFlowStep } from "@/types"; 
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -21,13 +21,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { handleGenerateCampaignScripts } from "./actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCallCenter } from "@/contexts/CallCenterContext";
-import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
+import { useAuth } from "@/contexts/AuthContext"; 
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MOCK_CAMPAIGNS } from "@/lib/mock-data"; 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { addAuditLog } from "@/services/audit-log-service";
+import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
+import { parseISO } from "date-fns"; // Added for date sorting
 
+type SortableCampaignKey = keyof Campaign | 'callFlowsCount' | 'createdDateFormatted';
+type SortDirection = "asc" | "desc";
 
 const campaignSchemaBase = z.object({
   id: z.string().optional(),
@@ -44,7 +48,7 @@ type CampaignFormData = z.infer<typeof campaignSchemaBase>;
 
 export default function CampaignsPage() {
   const { currentCallCenter, isLoading: isCallCenterLoading } = useCallCenter();
-  const { currentUser } = useAuth(); // Get current user for logging
+  const { currentUser } = useAuth(); 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isCampaignFormOpen, setIsCampaignFormOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
@@ -54,9 +58,13 @@ export default function CampaignsPage() {
   const [campaignToReview, setCampaignToReview] = useState<Campaign | null>(null);
   const [editableCallFlows, setEditableCallFlows] = useState<CallFlow[]>([]);
 
-
   const [searchTermCampaigns, setSearchTermCampaigns] = useState("");
   const [filterStatusCampaigns, setFilterStatusCampaigns] = useState<Campaign["status"] | "all">("all");
+
+  // State for sorting and selection
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
+  const [sortColumn, setSortColumn] = useState<SortableCampaignKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const { control, handleSubmit, register, reset, formState: { errors }, setValue } = useForm<CampaignFormData>({
     resolver: zodResolver(campaignSchemaBase),
@@ -78,21 +86,86 @@ export default function CampaignsPage() {
       setCampaigns([]); 
     }
     resetFilters();
+    setSelectedCampaignIds([]);
   }, [currentCallCenter]);
 
-  const filteredCampaignsData = useMemo(() => {
-    return campaigns.filter(campaign => {
+  const filteredAndSortedCampaignsData = useMemo(() => {
+    let filtered = campaigns.filter(campaign => {
       const matchesSearch = searchTermCampaigns === "" || 
                             campaign.name.toLowerCase().includes(searchTermCampaigns.toLowerCase()) ||
                             (campaign.callObjective && campaign.callObjective.toLowerCase().includes(searchTermCampaigns.toLowerCase()));
       const matchesStatus = filterStatusCampaigns === "all" || campaign.status === filterStatusCampaigns;
       return matchesSearch && matchesStatus;
     });
-  }, [campaigns, searchTermCampaigns, filterStatusCampaigns]);
+
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let valA: any;
+        let valB: any;
+
+        if (sortColumn === 'callFlowsCount') {
+          valA = a.callFlows?.length || 0;
+          valB = b.callFlows?.length || 0;
+        } else if (sortColumn === 'createdDate') {
+          valA = parseISO(a.createdDate).getTime();
+          valB = parseISO(b.createdDate).getTime();
+        } else {
+          valA = a[sortColumn as keyof Campaign];
+          valB = b[sortColumn as keyof Campaign];
+        }
+        
+        if (valA == null && valB == null) return 0;
+        if (valA == null) return 1;
+        if (valB == null) return -1;
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortDirection === 'asc' ? valA - valB : valB - valA;
+        } else if (typeof valA === 'string' && typeof valB === 'string') {
+          return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+        return 0;
+      });
+    }
+    return filtered;
+  }, [campaigns, searchTermCampaigns, filterStatusCampaigns, sortColumn, sortDirection]);
+
+  const handleSort = (columnKey: SortableCampaignKey) => {
+    if (sortColumn === columnKey) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(columnKey);
+      setSortDirection('asc');
+    }
+  };
+
+  const renderSortIcon = (columnKey: SortableCampaignKey) => {
+    if (sortColumn !== columnKey) {
+      return <ArrowUpDown className="ml-2 h-4 w-4 opacity-30" />;
+    }
+    return sortDirection === 'asc' ? 
+      <ArrowUpDown className="ml-2 h-4 w-4 text-primary transform rotate-0" /> : 
+      <ArrowUpDown className="ml-2 h-4 w-4 text-primary transform rotate-180" />;
+  };
+
+  const handleSelectCampaign = (campaignId: string, checked: boolean) => {
+    setSelectedCampaignIds(prev => 
+      checked ? [...prev, campaignId] : prev.filter(id => id !== campaignId)
+    );
+  };
+
+  const handleSelectAllCampaigns = (checked: boolean) => {
+    if (checked) {
+      setSelectedCampaignIds(filteredAndSortedCampaignsData.map(c => c.id));
+    } else {
+      setSelectedCampaignIds([]);
+    }
+  };
 
   const resetFilters = () => {
     setSearchTermCampaigns("");
     setFilterStatusCampaigns("all");
+    setSortColumn(null);
+    // setSelectedCampaignIds([]); // Keep selection or clear based on preference
   };
 
   const handleCampaignFormSubmit = async (data: CampaignFormData) => {
@@ -189,13 +262,14 @@ export default function CampaignsPage() {
     setIsCampaignFormOpen(true);
   };
 
-  const handleDeleteCampaign = (id: string) => {
-    const campaignToDelete = campaigns.find(c => c.id === id);
+  const handleDeleteCampaign = (campaignId: string) => {
+    const campaignToDelete = MOCK_CAMPAIGNS.find(c => c.id === campaignId);
     if (!campaignToDelete || !currentUser || !currentCallCenter) return;
 
-    const index = MOCK_CAMPAIGNS.findIndex(c => c.id === id);
+    const index = MOCK_CAMPAIGNS.findIndex(c => c.id === campaignId);
     if (index > -1) MOCK_CAMPAIGNS.splice(index, 1);
-    setCampaigns(campaigns.filter(c => c.id !== id));
+    setCampaigns(prev => prev.filter(c => c.id !== campaignId));
+    setSelectedCampaignIds(prev => prev.filter(id => id !== campaignId));
     
     addAuditLog({
         action: "CAMPAIGN_DELETED",
@@ -203,22 +277,20 @@ export default function CampaignsPage() {
         userName: currentUser.name || currentUser.email,
         callCenterId: currentCallCenter.id,
         callCenterName: currentCallCenter.name,
-        details: { campaignId: id, campaignName: campaignToDelete.name }
+        details: { campaignId: campaignId, campaignName: campaignToDelete.name }
     });
     toast({ title: "Campaign Deleted", variant: "destructive" });
   };
   
-  const handleChangeCampaignStatus = (id: string, status: Campaign["status"]) => {
+  const handleChangeCampaignStatus = (campaignId: string, newStatus: Campaign["status"]) => {
     if (!currentUser || !currentCallCenter) return;
-    const campaignToUpdate = campaigns.find(c => c.id === id);
+    const campaignToUpdate = MOCK_CAMPAIGNS.find(c => c.id === campaignId);
     if (!campaignToUpdate) return;
 
-    const updatedCampaigns = MOCK_CAMPAIGNS.map(c => c.id === id ? { ...c, status } : c);
-    MOCK_CAMPAIGNS.length = 0;
-    MOCK_CAMPAIGNS.push(...updatedCampaigns);
-    if (currentCallCenter) {
-      setCampaigns(MOCK_CAMPAIGNS.filter(c => c.callCenterId === currentCallCenter.id));
-    }
+    const index = MOCK_CAMPAIGNS.findIndex(c => c.id === campaignId);
+    if (index > -1) MOCK_CAMPAIGNS[index].status = newStatus;
+    
+    setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: newStatus } : c));
     
     addAuditLog({
         action: "CAMPAIGN_STATUS_CHANGED",
@@ -226,9 +298,9 @@ export default function CampaignsPage() {
         userName: currentUser.name || currentUser.email,
         callCenterId: currentCallCenter.id,
         callCenterName: currentCallCenter.name,
-        details: { campaignId: id, campaignName: campaignToUpdate.name, oldStatus: campaignToUpdate.status, newStatus: status }
+        details: { campaignId: campaignId, campaignName: campaignToUpdate.name, oldStatus: campaignToUpdate.status, newStatus: newStatus }
     });
-    toast({ title: "Status Updated", description: `Campaign status changed to ${status}.`});
+    toast({ title: "Status Updated", description: `Campaign status changed to ${newStatus}.`});
   };
   
   const handleSaveReviewedCallFlows = () => {
@@ -283,6 +355,22 @@ export default function CampaignsPage() {
     }
   };
 
+  const handleBulkAction = (action: "activate" | "pause" | "archive" | "delete") => {
+    if (selectedCampaignIds.length === 0) {
+      toast({ title: "No Campaigns Selected", description: "Please select campaigns to perform a bulk action.", variant: "default" });
+      return;
+    }
+    const actionMap = {
+      activate: () => selectedCampaignIds.forEach(id => handleChangeCampaignStatus(id, "active")),
+      pause: () => selectedCampaignIds.forEach(id => handleChangeCampaignStatus(id, "paused")),
+      archive: () => selectedCampaignIds.forEach(id => handleChangeCampaignStatus(id, "archived")),
+      delete: () => selectedCampaignIds.forEach(id => handleDeleteCampaign(id)),
+    };
+    actionMap[action]();
+    toast({ title: `Bulk Action: ${action.charAt(0).toUpperCase() + action.slice(1)}`, description: `${selectedCampaignIds.length} campaigns affected.`});
+    setSelectedCampaignIds([]); // Clear selection after action
+  };
+
   if (isCallCenterLoading) {
     return ( <div className="space-y-6"> <Skeleton className="h-9 w-3/4 md:w-1/2" /> <Card><Skeleton className="h-64 w-full" /></Card> </div> );
   }
@@ -295,6 +383,9 @@ export default function CampaignsPage() {
       </div>
     );
   }
+
+  const isAllFilteredCampaignsSelected = filteredAndSortedCampaignsData.length > 0 && selectedCampaignIds.length === filteredAndSortedCampaignsData.length;
+  const isSomeFilteredCampaignsSelected = selectedCampaignIds.length > 0 && selectedCampaignIds.length < filteredAndSortedCampaignsData.length;
 
   return (
     <div className="space-y-6">
@@ -490,7 +581,7 @@ export default function CampaignsPage() {
       <Card className="shadow-lg">
          <CardHeader>
           <CardTitle>Filter Campaigns</CardTitle>
-          <CardDescription>Refine the list of campaigns within {currentCallCenter.name}.</CardDescription>
+          <CardDescription>Refine the list of campaigns within {currentCallCenter.name}. Showing {filteredAndSortedCampaignsData.length} of {campaigns.length} campaigns.</CardDescription>
            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div className="md:col-span-2">
               <Label htmlFor="campaignSearch">Search by Name/Objective</Label>
@@ -510,27 +601,114 @@ export default function CampaignsPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Objective</TableHead>
-                <TableHead>Call Flows</TableHead>
-                <TableHead>Created Date</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCampaignsData.length > 0 ? (
-                filteredCampaignsData.map((campaign) => (
-                  <TableRow key={campaign.id}><TableCell className="font-medium">{campaign.name}</TableCell><TableCell><Badge variant={statusBadgeVariant(campaign.status)} className="capitalize">{statusIcon(campaign.status)}{campaign.status}</Badge></TableCell><TableCell className="max-w-xs truncate text-muted-foreground">{campaign.callObjective}</TableCell><TableCell>{(campaign.callFlows && campaign.callFlows.length > 0) ? (<Button variant="outline" size="sm" onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }}><FileJson className="mr-2 h-4 w-4" /> Review ({campaign.callFlows.length})</Button>) : ( <span className="text-xs text-muted-foreground">No call flows</span> )}</TableCell><TableCell className="text-muted-foreground">{new Date(campaign.createdDate).toLocaleDateString()}</TableCell><TableCell className="text-right"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Open menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuLabel>Actions</DropdownMenuLabel><DropdownMenuItem onClick={() => handleOpenEditCampaignForm(campaign)}><Edit2 className="mr-2 h-4 w-4" /> Edit Details & Master Script</DropdownMenuItem><DropdownMenuItem onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }} disabled={!campaign.callFlows || campaign.callFlows.length === 0}><FileJson className="mr-2 h-4 w-4" /> Review/Edit Call Flows</DropdownMenuItem><DropdownMenuSeparator />{campaign.status !== "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "active")}><Play className="mr-2 h-4 w-4" /> Activate</DropdownMenuItem>}{campaign.status === "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "paused")}><Pause className="mr-2 h-4 w-4" /> Pause</DropdownMenuItem>}{campaign.status !== "archived" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "archived")}><Archive className="mr-2 h-4 w-4" /> Archive</DropdownMenuItem>}<DropdownMenuSeparator /><DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell></TableRow>
-                ))
-              ) : (
-                <TableRow><TableCell colSpan={6} className="text-center h-24">{campaigns.length === 0 ? "No campaigns created for this call center." : "No campaigns match filters."}</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
+          {selectedCampaignIds.length > 0 && (
+            <div className="p-4 border-b bg-muted/50">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{selectedCampaignIds.length} campaign(s) selected.</span>
+                <Button size="sm" onClick={() => handleBulkAction("activate")}>Activate Selected</Button>
+                <Button size="sm" variant="secondary" onClick={() => handleBulkAction("pause")}>Pause Selected</Button>
+                <Button size="sm" variant="outline" onClick={() => handleBulkAction("archive")}>Archive Selected</Button>
+                <Button size="sm" variant="destructive" onClick={() => handleBulkAction("delete")}>Delete Selected</Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedCampaignIds([])}>Clear Selection</Button>
+              </div>
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                        checked={isAllFilteredCampaignsSelected}
+                        onCheckedChange={(checked) => handleSelectAllCampaigns(Boolean(checked))}
+                        aria-label="Select all filtered campaigns"
+                        indeterminate={isSomeFilteredCampaignsSelected}
+                    />
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center">Name {renderSortIcon('name')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('status')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center">Status {renderSortIcon('status')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('callObjective')} className="cursor-pointer hover:bg-muted/50 transition-colors max-w-xs">
+                    <div className="flex items-center">Objective {renderSortIcon('callObjective')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('callFlowsCount')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                     <div className="flex items-center">Call Flows {renderSortIcon('callFlowsCount')}</div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort('createdDate')} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center">Created {renderSortIcon('createdDate')}</div>
+                  </TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredAndSortedCampaignsData.length > 0 ? (
+                  filteredAndSortedCampaignsData.map((campaign) => (
+                    <TableRow 
+                        key={campaign.id} 
+                        data-state={selectedCampaignIds.includes(campaign.id) ? "selected" : ""}
+                    >
+                      <TableCell>
+                        <Checkbox
+                            checked={selectedCampaignIds.includes(campaign.id)}
+                            onCheckedChange={(checked) => handleSelectCampaign(campaign.id, Boolean(checked))}
+                            aria-label={`Select campaign ${campaign.name}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{campaign.name}</TableCell>
+                      <TableCell><Badge variant={statusBadgeVariant(campaign.status)} className="capitalize">{statusIcon(campaign.status)}{campaign.status}</Badge></TableCell>
+                      <TableCell className="max-w-xs truncate text-muted-foreground">{campaign.callObjective}</TableCell>
+                      <TableCell>
+                        {(campaign.callFlows && campaign.callFlows.length > 0) ? (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }}
+                          >
+                            <FileJson className="mr-2 h-4 w-4" /> Review ({campaign.callFlows.length})
+                          </Button>
+                        ) : ( 
+                          <span className="text-xs text-muted-foreground">No call flows</span> 
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(campaign.createdDate).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Open menu for {campaign.name}</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => handleOpenEditCampaignForm(campaign)}>
+                              <Edit2 className="mr-2 h-4 w-4" /> Edit Details & Master Script
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setCampaignToReview(campaign); setEditableCallFlows(JSON.parse(JSON.stringify(campaign.callFlows || []))); setIsReviewDialogOpen(true); }} disabled={!campaign.callFlows || campaign.callFlows.length === 0}>
+                              <FileJson className="mr-2 h-4 w-4" /> Review/Edit Call Flows
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {campaign.status !== "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "active")}><Play className="mr-2 h-4 w-4" /> Activate</DropdownMenuItem>}
+                            {campaign.status === "active" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "paused")}><Pause className="mr-2 h-4 w-4" /> Pause</DropdownMenuItem>}
+                            {campaign.status !== "archived" && <DropdownMenuItem onClick={() => handleChangeCampaignStatus(campaign.id, "archived")}><Archive className="mr-2 h-4 w-4" /> Archive</DropdownMenuItem>}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow><TableCell colSpan={7} className="text-center h-24">{campaigns.length === 0 ? "No campaigns created for this call center." : "No campaigns match filters."}</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
